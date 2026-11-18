@@ -1,0 +1,196 @@
+{
+  "fixture": "getTrace.v3_ok",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/traces/31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-11b16b09ed8dc189225e418444d52b57-e934437bf8f19de2-01"
+    },
+    "body": {
+      "result": {
+        "resourceSpans": [
+          {
+            "resource": {
+              "attributes": [
+                {
+                  "key": "deployment.environment.name",
+                  "value": {
+                    "stringValue": "sdk-test"
+                  }
+                },
+                {
+                  "key": "service.name",
+                  "value": {
+                    "stringValue": "sdk-gw-86837b62"
+                  }
+                },
+                {
+                  "key": "service.version",
+                  "value": {
+                    "stringValue": "1.2.3"
+                  }
+                }
+              ]
+            },
+            "scopeSpans": [
+              {
+                "scope": {
+                  "name": "grow-sdk-verify",
+                  "version": "0.1.0"
+                },
+                "spans": [
+                  {
+                    "traceId": "31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+                    "spanId": "55bc22d6caba571a",
+                    "name": "GET /orders",
+                    "kind": 3,
+                    "startTimeUnixNano": "1795034918142512222",
+                    "endTimeUnixNano": "1795034919342512222",
+                    "attributes": [
+                      {
+                        "key": "http.request.method",
+                        "value": {
+                          "stringValue": "GET"
+                        }
+                      },
+                      {
+                        "key": "order.id",
+                        "value": {
+                          "stringValue": "86837b62"
+                        }
+                      }
+                    ],
+                    "status": {
+                      "code": 1
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "resource": {
+              "attributes": [
+                {
+                  "key": "service.name",
+                  "value": {
+                    "stringValue": "sdk-wk-86837b62"
+                  }
+                }
+              ]
+            },
+            "scopeSpans": [
+              {
+                "scope": {
+                  "name": "grow-sdk-verify"
+                },
+                "spans": [
+                  {
+                    "traceId": "31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+                    "spanId": "02811a5d0fecd819",
+                    "parentSpanId": "55bc22d6caba571a",
+                    "name": "handle /orders",
+                    "kind": 2,
+                    "startTimeUnixNano": "1795034918242512222",
+                    "endTimeUnixNano": "1795034919242512222",
+                    "attributes": [
+                      {
+                        "key": "array.attr",
+                        "value": {
+                          "arrayValue": {
+                            "values": [
+                              {
+                                "stringValue": "a"
+                              },
+                              {
+                                "stringValue": "b"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "key": "bool.attr",
+                        "value": {
+                          "boolValue": true
+                        }
+                      },
+                      {
+                        "key": "double.attr",
+                        "value": {
+                          "doubleValue": 1.5
+                        }
+                      },
+                      {
+                        "key": "int.attr",
+                        "value": {
+                          "intValue": "42"
+                        }
+                      },
+                      {
+                        "key": "str.attr",
+                        "value": {
+                          "stringValue": "v"
+                        }
+                      }
+                    ],
+                    "events": [
+                      {
+                        "timeUnixNano": "1795034918342512222",
+                        "name": "cache.miss",
+                        "attributes": [
+                          {
+                            "key": "cache.key",
+                            "value": {
+                              "stringValue": "k1"
+                            }
+                          }
+                        ]
+                      }
+                    ],
+                    "links": [
+                      {
+                        "traceId": "85092f96d876e30b507cfd1361b0325e",
+                        "spanId": "00f067aa0ba902b7",
+                        "attributes": [
+                          {
+                            "key": "link.kind",
+                            "value": {
+                              "stringValue": "follows"
+                            }
+                          }
+                        ]
+                      }
+                    ],
+                    "status": {
+                      "message": "boom",
+                      "code": 2
+                    }
+                  },
+                  {
+                    "traceId": "31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+                    "spanId": "8a8245d55659c71f",
+                    "parentSpanId": "02811a5d0fecd819",
+                    "name": "db.query",
+                    "kind": 1,
+                    "startTimeUnixNano": "1795034918442512222",
+                    "endTimeUnixNano": "1795034918447512222",
+                    "status": {}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

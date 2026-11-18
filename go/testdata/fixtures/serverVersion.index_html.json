@@ -1,0 +1,21 @@
+{
+  "fixture": "serverVersion.index_html",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/html; charset=utf-8"
+    },
+    "bodyExcerpt": "JAEGER_VERSION = {\"gitCommit\":\"d723f91447f29a345c288f37eb8d1ce7807bc0be\",\"gitVersion\":\"v2.23.0\",\"buildDate\":\"2026-11-04T16:02:09Z\"};",
+    "parsed": {
+      "gitCommit": "d723f91447f29a345c288f37eb8d1ce7807bc0be",
+      "gitVersion": "v2.23.0",
+      "buildDate": "2026-11-04T16:02:09Z"
+    }
+  }
+}

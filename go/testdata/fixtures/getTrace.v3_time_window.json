@@ -1,0 +1,23 @@
+{
+  "fixture": "getTrace.v3_time_window",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/traces/31d0f4ed0c5cf87b3a63afbe7b0dc8d1?startTime=2026-11-18T20%3A38%3A43.142546Z&endTime=2026-11-18T20%3A58%3A43.142599Z",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-667c2c063509fbc077f34401bd8508ea-5825d17e739d8b78-01"
+    },
+    "body": {
+      "result": {
+        "resourceSpans": "<2 resourceSpans>"
+      }
+    }
+  }
+}

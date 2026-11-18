@@ -1,7 +1,10 @@
-// Command example shows the basics of the Jaeger Go SDK: configuration
-// from the environment, health, an authenticated ping and error handling.
+// Command example shows the Jaeger Go SDK end to end: configuration from the
+// environment, health and version, OpenTelemetry tracing exported to Jaeger over
+// OTLP, reading the trace back through the query API, and remote sampling.
 //
-//	GROW_JAEGER_URL=http://127.0.0.1:16686 GROW_JAEGER_TOKEN=... go run .
+//	GROW_JAEGER_URL=http://127.0.0.1:16686 \
+//	GROW_JAEGER_OTLP_HTTP_ENDPOINT=http://127.0.0.1:4318 \
+//	GROW_JAEGER_SAMPLING_URL=http://127.0.0.1:5778/sampling go run .
 package main
 
 import (
@@ -11,6 +14,9 @@ import (
 	"log/slog"
 	"os"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	jaeger "github.com/grow-codes-packages/jaeger/go"
 )
@@ -23,18 +29,14 @@ func main() {
 }
 
 func run() error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
 	cfg, err := jaeger.ConfigFromEnv()
 	if err != nil {
 		return err // CONFIG error naming the variable, never its value
 	}
 	cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	cfg.Hooks = &jaeger.Hooks{
-		OnError: func(info jaeger.ErrorInfo) {
-			if info.WillRetry {
-				fmt.Fprintf(os.Stderr, "retrying %s %s (attempt %d)\n", info.Method, info.URL, info.Attempt)
-			}
-		},
-	}
 	fmt.Println("config:", cfg) // credentials print as [REDACTED]
 
 	client, err := jaeger.NewClient(cfg)
@@ -43,24 +45,11 @@ func run() error {
 	}
 	defer func() { _ = client.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	health, err := client.Health(ctx)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("health: healthy=%t status=%s\n", health.Healthy, health.Status)
-
-	latency, err := client.Ping(ctx)
-	switch {
-	case errors.Is(err, jaeger.ErrAuthentication):
-		return fmt.Errorf("check GROW_JAEGER_TOKEN: %w", err)
-	case err != nil:
-		return err
-	}
-	fmt.Println("ping:", latency)
-
 	version, err := client.ServerVersion(ctx)
 	switch {
 	case errors.Is(err, jaeger.ErrUnsupported):
@@ -70,5 +59,57 @@ func run() error {
 	default:
 		fmt.Println("server version:", version)
 	}
+
+	// Tracing: OTLP HTTP/protobuf to Jaeger (GROW_JAEGER_OTLP_* / OTEL_EXPORTER_OTLP_*).
+	service := fmt.Sprintf("example-go-%d", time.Now().Unix())
+	tracing, err := jaeger.InitTracing(ctx, jaeger.SamplingDevelopment.Apply(jaeger.TracingConfig{ServiceName: service}))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tracing.Shutdown(context.Background()) }()
+
+	var traceID string
+	err = jaeger.Traced(ctx, "checkout", func(ctx context.Context) error {
+		traceID, _ = jaeger.CurrentTraceID(ctx)
+		jaeger.CurrentSpan(ctx).SetAttributes(attribute.String("order.id", "42"))
+		_, err := jaeger.WithSpan(ctx, "charge card", func(ctx context.Context) (string, error) {
+			jaeger.AddEvent(ctx, "card.authorized", map[string]any{"amount": 1999})
+			return "ok", nil
+		}, jaeger.WithSpanKind(trace.SpanKindClient))
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if err := tracing.ForceFlush(ctx); err != nil {
+		return err
+	}
+
+	// Query: wait until Jaeger has stored both spans, then search.
+	q := client.Query()
+	tr, err := q.WaitForTrace(ctx, traceID, jaeger.WaitForTraceOptions{MinSpans: 2, Interval: 250 * time.Millisecond})
+	if err != nil {
+		return err
+	}
+	for _, s := range tr.Spans {
+		fmt.Printf("span %s kind=%s parent=%q duration=%dµs\n", s.Name, s.Kind, s.ParentSpanID, s.DurationMicros)
+	}
+	summaries, err := q.SearchTraces(ctx, jaeger.TraceSearchQuery{Service: service, Tags: map[string]string{"order.id": "42"}})
+	if err != nil {
+		return err
+	}
+	fmt.Println("matching traces:", len(summaries))
+	operations, err := q.ListOperations(ctx, service)
+	if err != nil {
+		return err
+	}
+	fmt.Println("operations:", operations)
+
+	// Remote sampling: the strategy Jaeger hands out for this service.
+	strategy, err := client.SamplingStrategy(ctx, service)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("sampling: %s rate=%g\n", strategy.StrategyType, strategy.SamplingRate)
 	return nil
 }

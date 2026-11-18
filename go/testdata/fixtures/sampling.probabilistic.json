@@ -1,0 +1,36 @@
+{
+  "fixture": "sampling.probabilistic",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger-sampling:5778",
+    "path": "/sampling?service=sdk-sampling-prob",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "strategyType": "PROBABILISTIC",
+      "probabilisticSampling": {
+        "samplingRate": 0.25
+      },
+      "operationSampling": {
+        "defaultSamplingProbability": 0.25,
+        "defaultLowerBoundTracesPerSecond": 0,
+        "perOperationStrategies": [
+          {
+            "operation": "/health",
+            "probabilisticSampling": {
+              "samplingRate": 0
+            }
+          }
+        ],
+        "defaultUpperBoundTracesPerSecond": 0
+      }
+    }
+  }
+}

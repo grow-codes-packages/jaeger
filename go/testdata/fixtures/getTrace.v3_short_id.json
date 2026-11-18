@@ -1,0 +1,54 @@
+{
+  "fixture": "getTrace.v3_short_id",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/traces/b94006dad19af3af",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-35c4d6ce9d37b1b0da6219c60aa45f96-33934cbf447431b4-01"
+    },
+    "body": {
+      "result": {
+        "resourceSpans": [
+          {
+            "resource": {
+              "attributes": [
+                {
+                  "key": "service.name",
+                  "value": {
+                    "stringValue": "sdk-gw-86837b62"
+                  }
+                }
+              ]
+            },
+            "scopeSpans": [
+              {
+                "scope": {
+                  "name": "grow-sdk-verify"
+                },
+                "spans": [
+                  {
+                    "traceId": "0000000000000000b94006dad19af3af",
+                    "spanId": "df21bc5d721d0ae1",
+                    "name": "short-id-op",
+                    "kind": 2,
+                    "startTimeUnixNano": "1795034918142512222",
+                    "endTimeUnixNano": "1795034918147512222",
+                    "status": {}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
