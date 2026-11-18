@@ -1,0 +1,25 @@
+{
+  "fixture": "getDependencies.outside_window",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/dependencies?endTs=1795031323502&lookback=60000",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-709f55c368ef674c419f505f3d329285-0cef2341e7d6fb2c-01"
+    },
+    "body": {
+      "data": [],
+      "total": 0,
+      "limit": 0,
+      "offset": 0,
+      "errors": null
+    }
+  }
+}

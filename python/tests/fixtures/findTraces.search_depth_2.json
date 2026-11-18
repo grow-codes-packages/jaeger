@@ -1,0 +1,26 @@
+{
+  "fixture": "findTraces.search_depth_2",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/traces?query.serviceName=sdk-many-86837b62&query.searchDepth=2&query.startTimeMin=2026-11-18T20%3A38%3A43.142546Z&query.startTimeMax=2026-11-18T20%3A58%3A43.142599Z",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-48f64d6725a4cd5d7ffea7d08d2b2689-177c7f1233b0f100-01"
+    },
+    "body": {
+      "result": {
+        "traceIds": [
+          "00302ecf5ddfd43345dff735c0521d78",
+          "6f78cff2b82f37ea71e44b66c1cf44f2"
+        ]
+      }
+    }
+  }
+}

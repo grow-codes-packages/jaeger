@@ -1,0 +1,18 @@
+{
+  "fixture": "otlpHttp.method_not_allowed",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:4318",
+    "path": "/v1/traces",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 405,
+    "headers": {
+      "content-type": "text/plain"
+    },
+    "body": "405 method not allowed, supported: [POST]"
+  }
+}

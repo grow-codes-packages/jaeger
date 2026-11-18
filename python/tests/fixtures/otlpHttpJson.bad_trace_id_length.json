@@ -1,0 +1,56 @@
+{
+  "fixture": "otlpHttpJson.bad_trace_id_length",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "POST",
+    "host": "jaeger:4318",
+    "path": "/v1/traces",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "resourceSpans": [
+        {
+          "resource": {
+            "attributes": [
+              {
+                "key": "service.name",
+                "value": {
+                  "stringValue": "sdk-badid-86837b62"
+                }
+              }
+            ]
+          },
+          "scopeSpans": [
+            {
+              "scope": {
+                "name": "grow-sdk-verify"
+              },
+              "spans": [
+                {
+                  "traceId": "abc",
+                  "spanId": "9f1be307a9183a3f",
+                  "name": "bad-id",
+                  "kind": 2,
+                  "startTimeUnixNano": "1795034918142512222",
+                  "endTimeUnixNano": "1795034918143512222",
+                  "attributes": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "code": 3,
+      "message": "ID.UnmarshalJSONIter: length mismatch, error found in #10 byte of ...|Id\": \"abc\", \"spanId\"|..., bigger context ...|\": \"grow-sdk-verify\"}, \"spans\": [{\"traceId\": \"abc\", \"spanId\": \"9f1be307a9183a3f\", \"name\": \"bad-id\", |..."
+    }
+  }
+}

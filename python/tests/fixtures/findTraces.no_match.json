@@ -1,0 +1,24 @@
+{
+  "fixture": "findTraces.no_match",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/traces?query.serviceName=sdk-wk-86837b62&query.operationName=nope&query.startTimeMin=2026-11-18T20%3A38%3A43.142546Z&query.startTimeMax=2026-11-18T20%3A58%3A43.142599Z",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-f8b14f2b8abb16e377fcb4044ebfa96b-d0b0234f8d8f289b-01"
+    },
+    "body": {
+      "error": {
+        "httpCode": 404,
+        "message": "No traces found"
+      }
+    }
+  }
+}

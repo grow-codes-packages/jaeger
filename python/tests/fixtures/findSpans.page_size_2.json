@@ -1,0 +1,120 @@
+{
+  "fixture": "findSpans.page_size_2",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/spans?query.startTimeMin=2026-11-18T20%3A38%3A43.142546Z&query.startTimeMax=2026-11-18T20%3A58%3A43.142599Z&query.pagination.pageSize=2",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-f47e1b7ca9d19faf089abd08c5b3f9a2-02e546257dfda781-01"
+    },
+    "body": {
+      "result": {
+        "spans": {
+          "resourceSpans": [
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "sdk-tgh-86837b62"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "telemetrygen"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "4911ff8705c49344b897325d35cd6416",
+                      "spanId": "38e39863ac4fa8a7",
+                      "parentSpanId": "bfb831e21a267dbf",
+                      "flags": 256,
+                      "name": "okey-dokey-0",
+                      "kind": 2,
+                      "startTimeUnixNano": "1795034919998906743",
+                      "endTimeUnixNano": "1795034920003906743",
+                      "attributes": [
+                        {
+                          "key": "network.peer.address",
+                          "value": {
+                            "stringValue": "1.2.3.4"
+                          }
+                        },
+                        {
+                          "key": "peer.service",
+                          "value": {
+                            "stringValue": "telemetrygen-client"
+                          }
+                        }
+                      ],
+                      "status": {}
+                    }
+                  ]
+                }
+              ],
+              "schemaUrl": "https://opentelemetry.io/schemas/1.37.0"
+            },
+            {
+              "resource": {
+                "attributes": [
+                  {
+                    "key": "service.name",
+                    "value": {
+                      "stringValue": "sdk-tgh-86837b62"
+                    }
+                  }
+                ]
+              },
+              "scopeSpans": [
+                {
+                  "scope": {
+                    "name": "telemetrygen"
+                  },
+                  "spans": [
+                    {
+                      "traceId": "4911ff8705c49344b897325d35cd6416",
+                      "spanId": "bfb831e21a267dbf",
+                      "flags": 256,
+                      "name": "lets-go",
+                      "kind": 3,
+                      "startTimeUnixNano": "1795034919998906743",
+                      "endTimeUnixNano": "1795034920003906743",
+                      "attributes": [
+                        {
+                          "key": "network.peer.address",
+                          "value": {
+                            "stringValue": "1.2.3.4"
+                          }
+                        },
+                        {
+                          "key": "peer.service",
+                          "value": {
+                            "stringValue": "telemetrygen-server"
+                          }
+                        }
+                      ],
+                      "status": {}
+                    }
+                  ]
+                }
+              ],
+              "schemaUrl": "https://opentelemetry.io/schemas/1.37.0"
+            }
+          ]
+        },
+        "nextPageToken": "CAESEL5Lu0MME9YySzis8mOBgEYaQgkCmOk-v8304XchBDQ5MTFmZjg3MDVjNDkzNDRiODk3MzI1ZDM1Y2Q2NDE2EQRiZmI4MzFlMjFhMjY3ZGJmAAAAAQ"
+      }
+    }
+  }
+}
