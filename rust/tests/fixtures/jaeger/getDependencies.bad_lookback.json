@@ -1,0 +1,30 @@
+{
+  "fixture": "getDependencies.bad_lookback",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/dependencies?lookback=-5",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-33160f5e240e32c0d78544bb11bbc609-0ff5958d73cf5318-01"
+    },
+    "body": {
+      "data": null,
+      "total": 0,
+      "limit": 0,
+      "offset": 0,
+      "errors": [
+        {
+          "code": 400,
+          "msg": "unable to parse param 'lookback': must be a positive duration"
+        }
+      ]
+    }
+  }
+}

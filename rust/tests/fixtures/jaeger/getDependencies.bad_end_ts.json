@@ -1,0 +1,30 @@
+{
+  "fixture": "getDependencies.bad_end_ts",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/dependencies?endTs=tomorrow",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-74c13f97bd2eb125441a1ab93fc8b3d0-866d46a2d7f79601-01"
+    },
+    "body": {
+      "data": null,
+      "total": 0,
+      "limit": 0,
+      "offset": 0,
+      "errors": [
+        {
+          "code": 400,
+          "msg": "unable to parse param 'endTs': strconv.ParseInt: parsing \"tomorrow\": invalid syntax"
+        }
+      ]
+    }
+  }
+}

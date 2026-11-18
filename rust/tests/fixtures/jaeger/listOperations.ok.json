@@ -1,0 +1,30 @@
+{
+  "fixture": "listOperations.ok",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/operations?service=sdk-wk-86837b62",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-eafcb878224c04dc4b0c89d607c0e88c-fea9769507be9457-01"
+    },
+    "body": {
+      "operations": [
+        {
+          "name": "handle /orders",
+          "spanKind": "server"
+        },
+        {
+          "name": "db.query",
+          "spanKind": "internal"
+        }
+      ]
+    }
+  }
+}

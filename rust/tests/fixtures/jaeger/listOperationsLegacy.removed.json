@@ -1,0 +1,19 @@
+{
+  "fixture": "listOperationsLegacy.removed",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/services/sdk-wk-86837b62/operations",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-bc17af9e0f45da110b7b31ddf9ff8d52-8f24f5630b7e9892-01"
+    },
+    "body": "404 page not found\n"
+  }
+}

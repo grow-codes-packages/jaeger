@@ -1,0 +1,21 @@
+{
+  "fixture": "listOperations.no_service",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/operations",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-d58da8965bbeebcf60203c8ad538cbc0-8edd32435510d5a6-01"
+    },
+    "body": {
+      "operations": []
+    }
+  }
+}
