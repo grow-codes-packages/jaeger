@@ -1,0 +1,215 @@
+{
+  "fixture": "getTraceLegacy.ok",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/traces/31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-1ce6b3cfd03639f9889a030d9e9ce6d6-b8af7ebe7ced8e95-01"
+    },
+    "body": {
+      "data": [
+        {
+          "traceID": "31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+          "spans": [
+            {
+              "traceID": "31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+              "spanID": "55bc22d6caba571a",
+              "operationName": "GET /orders",
+              "references": [],
+              "startTime": 1795034918142512,
+              "duration": 1200000,
+              "tags": [
+                {
+                  "key": "otel.scope.name",
+                  "type": "string",
+                  "value": "grow-sdk-verify"
+                },
+                {
+                  "key": "otel.scope.version",
+                  "type": "string",
+                  "value": "0.1.0"
+                },
+                {
+                  "key": "http.request.method",
+                  "type": "string",
+                  "value": "GET"
+                },
+                {
+                  "key": "order.id",
+                  "type": "string",
+                  "value": "86837b62"
+                },
+                {
+                  "key": "span.kind",
+                  "type": "string",
+                  "value": "client"
+                },
+                {
+                  "key": "otel.status_code",
+                  "type": "string",
+                  "value": "OK"
+                }
+              ],
+              "logs": [],
+              "processID": "p1",
+              "warnings": null
+            },
+            {
+              "traceID": "31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+              "spanID": "02811a5d0fecd819",
+              "operationName": "handle /orders",
+              "references": [
+                {
+                  "refType": "CHILD_OF",
+                  "traceID": "31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+                  "spanID": "55bc22d6caba571a"
+                },
+                {
+                  "refType": "FOLLOWS_FROM",
+                  "traceID": "85092f96d876e30b507cfd1361b0325e",
+                  "spanID": "00f067aa0ba902b7"
+                }
+              ],
+              "startTime": 1795034918242512,
+              "duration": 1000000,
+              "tags": [
+                {
+                  "key": "otel.scope.name",
+                  "type": "string",
+                  "value": "grow-sdk-verify"
+                },
+                {
+                  "key": "array.attr",
+                  "type": "string",
+                  "value": "[\"a\",\"b\"]"
+                },
+                {
+                  "key": "bool.attr",
+                  "type": "bool",
+                  "value": true
+                },
+                {
+                  "key": "double.attr",
+                  "type": "float64",
+                  "value": 1.5
+                },
+                {
+                  "key": "int.attr",
+                  "type": "int64",
+                  "value": 42
+                },
+                {
+                  "key": "str.attr",
+                  "type": "string",
+                  "value": "v"
+                },
+                {
+                  "key": "span.kind",
+                  "type": "string",
+                  "value": "server"
+                },
+                {
+                  "key": "otel.status_code",
+                  "type": "string",
+                  "value": "ERROR"
+                },
+                {
+                  "key": "error",
+                  "type": "bool",
+                  "value": true
+                },
+                {
+                  "key": "otel.status_description",
+                  "type": "string",
+                  "value": "boom"
+                }
+              ],
+              "logs": [
+                {
+                  "timestamp": 1795034918342512,
+                  "fields": [
+                    {
+                      "key": "event",
+                      "type": "string",
+                      "value": "cache.miss"
+                    },
+                    {
+                      "key": "cache.key",
+                      "type": "string",
+                      "value": "k1"
+                    }
+                  ]
+                }
+              ],
+              "processID": "p2",
+              "warnings": null
+            },
+            {
+              "traceID": "31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+              "spanID": "8a8245d55659c71f",
+              "operationName": "db.query",
+              "references": [
+                {
+                  "refType": "CHILD_OF",
+                  "traceID": "31d0f4ed0c5cf87b3a63afbe7b0dc8d1",
+                  "spanID": "02811a5d0fecd819"
+                }
+              ],
+              "startTime": 1795034918442512,
+              "duration": 5000,
+              "tags": [
+                {
+                  "key": "otel.scope.name",
+                  "type": "string",
+                  "value": "grow-sdk-verify"
+                },
+                {
+                  "key": "span.kind",
+                  "type": "string",
+                  "value": "internal"
+                }
+              ],
+              "logs": [],
+              "processID": "p2",
+              "warnings": null
+            }
+          ],
+          "processes": {
+            "p1": {
+              "serviceName": "sdk-gw-86837b62",
+              "tags": [
+                {
+                  "key": "deployment.environment.name",
+                  "type": "string",
+                  "value": "sdk-test"
+                },
+                {
+                  "key": "service.version",
+                  "type": "string",
+                  "value": "1.2.3"
+                }
+              ]
+            },
+            "p2": {
+              "serviceName": "sdk-wk-86837b62",
+              "tags": []
+            }
+          },
+          "warnings": null
+        }
+      ],
+      "total": 0,
+      "limit": 0,
+      "offset": 0,
+      "errors": null
+    }
+  }
+}
