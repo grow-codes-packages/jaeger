@@ -1,0 +1,76 @@
+# Jaeger v2 real-service fixture for grow-codes-packages/jaeger (GRO-1378).
+#
+# - `jaeger`          : the service under test, image = stack catalog tag, started exactly
+#                       like Grow stacks start it (stock all-in-one, embedded config,
+#                       in-memory storage, default remote sampling probability 1).
+#                       Ports on the compose network:
+#                         16686 query HTTP (UI, /api/v3/*, /api/traces/{id}, /api/dependencies)
+#                         16685 query gRPC (api_v2 + api_v3 QueryService)
+#                          4317 OTLP gRPC, 4318 OTLP HTTP (/v1/traces)
+#                          5778 remote sampling HTTP (/sampling?service=), 5779 sampling gRPC
+#                         13133 healthcheckv2 (/status), 8888 Prometheus metrics (version)
+# - `jaeger-sampling` : second instance of the same image with a test config whose
+#                       remote_sampling reads a strategies FILE (per-operation, rate limiting,
+#                       probabilistic) from the named volume `sampling`, reloaded every 1 s.
+#                       Tests mount `sampling` at /sampling and may rewrite (or atomically
+#                       replace) /sampling/live/strategies.json to test live strategy refresh.
+#                       The `live/` subdir is 0777 and NOT sticky on purpose: the volume root
+#                       inherits sticky /tmp, and fs.protected_regular blocks writing another
+#                       uid's file there even with mode 0666.
+# - `bootstrap`       : one-shot; waits for both instances, proves ingest->query with a
+#                       canary span and writes KEY=value lines to /bootstrap/env.
+#
+# Jaeger has no auth in this setup: nothing secret is written anywhere.
+# No host ports are published. Test containers need only
+#   GROW_JAEGER_URL=http://jaeger:16686  and  /bootstrap/env  (volume `bootstrap`, read-only).
+
+x-jaeger-health: &jaeger-health
+  # healthcheckv2 /status is 200 once every component is StatusOK.
+  test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:13133/status && wget -q -O /dev/null http://127.0.0.1:16686/api/v3/services || exit 1"]
+  interval: 2s
+  timeout: 3s
+  retries: 30
+  start_period: 2s
+
+services:
+  service:   # service under test (harness contract); reachable as `jaeger`
+    networks:
+      default:
+        aliases: [jaeger]
+    image: jaegertracing/jaeger:2.23.0
+    restart: "no"
+    healthcheck: *jaeger-health
+
+  jaeger-sampling:
+    image: jaegertracing/jaeger:2.23.0
+    restart: "no"
+    entrypoint:
+      - sh
+      - -c
+      - mkdir -p /tmp/live && chmod 0777 /tmp/live && cp /etc/jaeger/strategies.seed.json /tmp/live/strategies.json && chmod 0666 /tmp/live/strategies.json && exec /cmd/jaeger/jaeger-linux --config=file:/etc/jaeger/config.yaml
+    volumes:
+      - ./config/jaeger-sampling.yaml:/etc/jaeger/config.yaml:ro
+      - ./config/strategies.seed.json:/etc/jaeger/strategies.seed.json:ro
+      - sampling:/tmp
+    healthcheck: *jaeger-health
+
+  bootstrap:
+    image: curlimages/curl:8.23.0
+    restart: "no"
+    user: "0:0"
+    depends_on:
+      service:
+        condition: service_healthy
+      jaeger-sampling:
+        condition: service_healthy
+    environment:
+      JAEGER_HOST: jaeger
+      JAEGER_SAMPLING_HOST: jaeger-sampling
+    volumes:
+      - ./bootstrap:/scripts:ro
+      - bootstrap:/bootstrap
+    entrypoint: ["sh", "/scripts/bootstrap.sh"]
+
+volumes:
+  bootstrap:
+  sampling:

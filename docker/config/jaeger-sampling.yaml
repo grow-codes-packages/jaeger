@@ -1,0 +1,57 @@
+# Test-only Jaeger v2 config for the `jaeger-sampling` fixture instance (GRO-1378).
+# Same pipeline as the image's embedded all-in-one config (v2.23.0
+# cmd/jaeger/internal/all-in-one.yaml), but the remote_sampling extension reads a
+# strategies FILE (/tmp/live/strategies.json, a named volume shared with tests) and
+# re-reads it every second, so SDK tests can exercise per-operation, rate-limiting
+# and probabilistic strategies plus a live strategy change.
+service:
+  extensions: [jaeger_storage, jaeger_query, remote_sampling, healthcheckv2]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+  telemetry:
+    resource:
+      service.name: jaeger-sampling
+    metrics:
+      level: none
+    logs:
+      level: info
+
+extensions:
+  jaeger_query:
+    storage:
+      traces: some_storage
+  jaeger_storage:
+    backends:
+      some_storage:
+        memory:
+          max_traces: 10000
+  remote_sampling:
+    file:
+      path: /tmp/live/strategies.json
+      reload_interval: 1s
+    http:
+      endpoint: 0.0.0.0:5778
+    grpc:
+      endpoint: 0.0.0.0:5779
+  healthcheckv2:
+    use_v2: true
+    http:
+      endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: some_storage

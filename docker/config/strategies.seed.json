@@ -1,0 +1,23 @@
+{
+  "service_strategies": [
+    {
+      "service": "sdk-sampling-ops",
+      "type": "probabilistic",
+      "param": 0.8,
+      "operation_strategies": [
+        { "operation": "GET /fast", "type": "probabilistic", "param": 0.2 },
+        { "operation": "GET /slow", "type": "probabilistic", "param": 0.4 }
+      ]
+    },
+    { "service": "sdk-sampling-rate", "type": "ratelimiting", "param": 5 },
+    { "service": "sdk-sampling-prob", "type": "probabilistic", "param": 0.25 },
+    { "service": "sdk-sampling-live", "type": "probabilistic", "param": 1.0 }
+  ],
+  "default_strategy": {
+    "type": "probabilistic",
+    "param": 0.5,
+    "operation_strategies": [
+      { "operation": "/health", "type": "probabilistic", "param": 0.0 }
+    ]
+  }
+}
