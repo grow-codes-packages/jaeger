@@ -1,0 +1,19 @@
+{
+  "fixture": "listServicesLegacy.removed",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/services",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-421cd38a24466b23f2fc504a02ceb5a0-1fbcc9507ddac1f4-01"
+    },
+    "body": "404 page not found\n"
+  }
+}

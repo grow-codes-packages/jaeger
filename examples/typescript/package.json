@@ -12,6 +12,7 @@
     "start": "node main.ts"
   },
   "dependencies": {
-    "@grow-codes/jaeger": "file:../../typescript"
+    "@grow-codes/jaeger": "file:../../typescript",
+    "@opentelemetry/api": "^1.9.1"
   }
 }

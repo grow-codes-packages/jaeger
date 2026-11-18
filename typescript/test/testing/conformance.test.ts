@@ -14,10 +14,14 @@ let server: MockServer;
 
 beforeAll(async () => {
   server = await startServer((req) => {
-    if (req.url === "/health") return { status: 200, body: { status: "ok" } };
-    if (req.url === "/version") return { status: 200, body: { version: "0.0.1" } };
-    if (req.url === "/v1/ping") return { status: 200, body: {} };
-    return { status: 404 };
+    if (req.url === "/")
+      return {
+        status: 200,
+        headers: { "content-type": "text/html" },
+        body: 'JAEGER_VERSION = {"gitVersion":"v2.23.0"};',
+      };
+    if (req.url === "/api/v3/services") return { status: 200, body: { services: [] } };
+    return { status: 404, body: "404 page not found" };
   });
 });
 
@@ -36,7 +40,7 @@ function options(): ConformanceOptions {
   };
 }
 
-describe("conformance (core) against a local demo API", () => {
+describe("conformance (core) against a local mock of the Jaeger query API", () => {
   it("every core scenario passes", async () => {
     const report = await runConformance(options());
     expect(report.failed, formatReport(report)).toBe(0);
