@@ -249,8 +249,9 @@ A started [`JaegerRemoteSampler`](sampling.md) for a service that uses the clien
 ## close
 
 Idempotent. Shuts down the tracing handles (flushing their batch processors) and the samplers
-created through the client, then releases connections. Later calls fail with `CONFIG` (TypeScript,
-Python) or `CANCELLED` (Rust, Go, Java).
+created through the client, then releases connections. Later calls fail with `CANCELLED`
+(`"<operation>: client is closed"`); only Python's `init_tracing` and `remote_sampler` raise
+`CONFIG` on a closed client.
 
 === "TypeScript"
 

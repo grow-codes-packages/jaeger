@@ -192,7 +192,14 @@ func TestClient(t *testing.T) {
 		ctx, cancel := contextWithCancel(t)
 		srv := newTestServer(t, func(w http.ResponseWriter, r *http.Request, _ int) {
 			if r.URL.Path == "/status" {
+				// Cancel, then hold the response until the client gives up, so the
+				// client never races a complete answer against the cancellation.
 				cancel()
+				select {
+				case <-r.Context().Done():
+				case <-time.After(5 * time.Second):
+				}
+				return
 			}
 			jaegerRoot(false)(w, r, 0)
 		})
