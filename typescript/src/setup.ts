@@ -8,6 +8,7 @@ import { OTLPTraceExporter as OtlpHttpExporter } from "@opentelemetry/exporter-t
 import { CompressionAlgorithm } from "@opentelemetry/otlp-exporter-base";
 import { ParentBasedSampler, type Sampler, type SpanExporter } from "@opentelemetry/sdk-trace-base";
 import { ConfigError, type EnvMap, type TlsOptions, parseDuration } from "./core/index.js";
+import { JaegerConfig, type JaegerConfigOptions } from "./config.js";
 import { JaegerRemoteSampler, type JaegerRemoteSamplerOptions } from "./sampler.js";
 import {
   initTracingWith,
@@ -48,7 +49,55 @@ export interface JaegerInitTracingOptions extends InitTracingOptions {
    * `process.env`, `false` ignores the environment.
    */
   env?: EnvMap | false;
+  /**
+   * Settings of a remote sampler that `initTracing` creates (`samplingUrl`, token, TLS, …).
+   * Default: `JaegerConfig.fromEnv` over the same environment (`GROW_JAEGER_SAMPLING_URL`,
+   * `JAEGER_SAMPLING_ENDPOINT`); `JaegerClient.initTracing` passes the client's config.
+   */
+  samplerConfig?: JaegerConfigOptions;
 }
+
+/** A named head-sampling choice: spread it into a {@link TracingConfig}. */
+export interface SamplingPresetValue {
+  readonly sampler: SamplerName;
+  readonly samplerRatio: number;
+}
+
+/**
+ * Sampling presets (same in every language): `development` records every trace
+ * (`always_on`), `production` keeps 10 % of new traces and follows the parent
+ * (`parentbased_traceidratio` 0.1), `followParent` is the OpenTelemetry default
+ * (`parentbased_always_on`), `off` records nothing (`always_off`), and `ratio(r)` gives
+ * `parentbased_traceidratio` r (`<= 0` → `parentbased_always_off`, `>= 1` → `followParent`).
+ *
+ * ```ts
+ * initTracing({ serviceName: "checkout", ...SamplingPreset.production });
+ * ```
+ */
+function preset(sampler: SamplerName, samplerRatio: number): SamplingPresetValue {
+  return Object.freeze({ sampler, samplerRatio });
+}
+
+const FOLLOW_PARENT = preset("parentbased_always_on", 1);
+
+export const SamplingPreset: {
+  readonly development: SamplingPresetValue;
+  readonly production: SamplingPresetValue;
+  readonly followParent: SamplingPresetValue;
+  readonly off: SamplingPresetValue;
+  ratio(ratio: number): SamplingPresetValue;
+} = Object.freeze({
+  development: preset("always_on", 1),
+  production: preset("parentbased_traceidratio", 0.1),
+  followParent: FOLLOW_PARENT,
+  off: preset("always_off", 1),
+  ratio(ratio: number): SamplingPresetValue {
+    if (Number.isNaN(ratio)) throw new ConfigError("tracing: sampling ratio must be a number");
+    if (ratio <= 0) return preset("parentbased_always_off", 1);
+    if (ratio >= 1) return FOLLOW_PARENT;
+    return preset("parentbased_traceidratio", ratio);
+  },
+});
 
 /** A running Jaeger tracing setup. */
 export interface JaegerTracingHandle extends TracingHandle {
@@ -107,10 +156,14 @@ class EnvChain {
     return undefined;
   }
 
-  /** `GROW_JAEGER_OTLP_<s>` > `OTEL_EXPORTER_OTLP_TRACES_<s>` > `OTEL_EXPORTER_OTLP_<s>`. */
-  otlp(suffix: string): { name: string; value: string } | undefined {
+  /**
+   * `GROW_JAEGER_OTLP_<s>` > `GROW_JAEGER_OTLP_<alias>`… > `OTEL_EXPORTER_OTLP_TRACES_<s>` >
+   * `OTEL_EXPORTER_OTLP_<s>`.
+   */
+  otlp(suffix: string, ...growAliases: string[]): { name: string; value: string } | undefined {
     return this.hit([
       `GROW_JAEGER_OTLP_${suffix}`,
+      ...growAliases.map((a) => `GROW_JAEGER_OTLP_${a}`),
       `OTEL_EXPORTER_OTLP_TRACES_${suffix}`,
       `OTEL_EXPORTER_OTLP_${suffix}`,
     ]);
@@ -176,9 +229,9 @@ function definedOnly<T extends object>(value: T): Partial<T> {
  * | `headers` | `…_HEADERS` (`k=v,k2=v2`, percent-decoded) |
  * | `compression` | `…_COMPRESSION` (`gzip`, `none`) |
  * | `batch.exportTimeoutMs` | `…_TIMEOUT` (ms or `10s`) |
- * | `tls` | `…_CERTIFICATE`, `…_CLIENT_CERTIFICATE`, `…_CLIENT_KEY` (paths) |
- * | `serviceName` | `OTEL_SERVICE_NAME`, else `service.name` in `OTEL_RESOURCE_ATTRIBUTES` |
- * | `resourceAttributes` | `OTEL_RESOURCE_ATTRIBUTES` |
+ * | `tls` | `…_CERTIFICATE` (also `GROW_JAEGER_OTLP_CA_CERT`), `…_CLIENT_CERTIFICATE`, `…_CLIENT_KEY` (paths) |
+ * | `serviceName` | `GROW_JAEGER_SERVICE_NAME`, `OTEL_SERVICE_NAME`, else `service.name` in `OTEL_RESOURCE_ATTRIBUTES` |
+ * | `resourceAttributes` | `OTEL_RESOURCE_ATTRIBUTES` merged with the explicit attributes (explicit wins per key) |
  * | `sampler`, `samplerRatio` | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG`; `jaeger_remote` / `parentbased_jaeger_remote` enable {@link JaegerTracingConfig.remoteSampler} (arg `endpoint=…,pollingIntervalMs=…,initialSamplingRate=…`) |
  * | `propagators` | `OTEL_PROPAGATORS` |
  *
@@ -232,7 +285,7 @@ export function tracingConfigFromEnv(
     fromEnv.batch = { exportTimeoutMs: ms };
   }
   const tls: TlsOptions = {};
-  const ca = chain.otlp("CERTIFICATE");
+  const ca = chain.otlp("CERTIFICATE", "CA_CERT");
   if (ca !== undefined) tls.caCertPath = ca.value;
   const cert = chain.otlp("CLIENT_CERTIFICATE");
   if (cert !== undefined) tls.clientCertPath = cert.value;
@@ -247,7 +300,9 @@ export function tracingConfigFromEnv(
     const { "service.name": _name, ...rest } = resourceAttributes;
     fromEnv.resourceAttributes = rest;
   }
-  const serviceName = chain.hit(["OTEL_SERVICE_NAME"])?.value ?? resourceAttributes["service.name"];
+  const serviceName =
+    chain.hit(["GROW_JAEGER_SERVICE_NAME", "OTEL_SERVICE_NAME"])?.value ??
+    resourceAttributes["service.name"];
   if (serviceName !== undefined) fromEnv.serviceName = serviceName;
 
   const sampler = chain.hit(["OTEL_TRACES_SAMPLER"]);
@@ -280,7 +335,7 @@ export function tracingConfigFromEnv(
     fromEnv.propagators = propagators.value
       .split(",")
       .map((p) => p.trim())
-      .filter((p) => p !== "");
+      .filter((p) => p !== "" && p !== "none");
 
   const explicit = definedOnly(overrides);
   const merged: Partial<JaegerTracingConfig> = { ...fromEnv, ...explicit };
@@ -288,6 +343,8 @@ export function tracingConfigFromEnv(
     merged.batch = { ...fromEnv.batch, ...definedOnly(explicit.batch ?? {}) };
   if (fromEnv.tls !== undefined || explicit.tls !== undefined)
     merged.tls = { ...fromEnv.tls, ...definedOnly(explicit.tls ?? {}) };
+  if (fromEnv.resourceAttributes !== undefined && explicit.resourceAttributes !== undefined)
+    merged.resourceAttributes = { ...fromEnv.resourceAttributes, ...explicit.resourceAttributes };
   if (explicit.sampler !== undefined && explicit.remoteSampler === undefined)
     delete merged.remoteSampler;
   return { ...merged, serviceName: merged.serviceName ?? "" };
@@ -373,7 +430,7 @@ export function initTracing(
   config: JaegerTracingConfig,
   options: JaegerInitTracingOptions = {},
 ): JaegerTracingHandle {
-  const { env, ...initOptions } = options;
+  const { env, samplerConfig, ...initOptions } = options;
   const effective =
     env === false ? { ...config } : tracingConfigFromEnv(config, env ?? process.env);
   const protocol = effective.protocol ?? JAEGER_DEFAULT_PROTOCOL;
@@ -396,8 +453,13 @@ export function initTracing(
       const opts = remote === true ? {} : remote;
       const { parentBased: pb, ...samplerOpts } = opts;
       parentBased = pb !== false;
+      const config =
+        samplerOpts.config ??
+        samplerConfig ??
+        (env === false ? {} : JaegerConfig.fromEnv({}, env ?? process.env));
       sampler = new JaegerRemoteSampler({
         ...samplerOpts,
+        config,
         serviceName: samplerOpts.serviceName ?? handle.config.serviceName,
       });
       owned = true;

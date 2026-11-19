@@ -10,6 +10,7 @@ import {
   JaegerQueryClient,
   JaegerRemoteSampler,
   NotFoundError,
+  SamplingPreset,
   ValidationError,
   addEvent,
   buildTree,
@@ -350,6 +351,33 @@ describe("remote sampling (port 5778)", () => {
     const strategy = await sampler.refresh();
     assert.deepEqual(strategy, { type: "probabilistic", samplingRate: 1, operations: [] });
     await sampler.close();
+    assert.deepEqual(await client.samplingStrategy(gateway), strategy);
+  });
+
+  test("SamplingPreset values export and read back through Jaeger", async () => {
+    assert.equal(SamplingPreset.ratio(1), SamplingPreset.followParent);
+    const service = `sdk-preset-${tag}`;
+    const handle = initTracing({
+      serviceName: service,
+      setGlobal: false,
+      ...SamplingPreset.development,
+    });
+    const off = initTracing(
+      { serviceName: `${service}-off`, setGlobal: false, ...SamplingPreset.off },
+      { env: false },
+    );
+    try {
+      assert.equal(off.tracer("t").startSpan("dropped").isRecording(), false);
+      const span = handle.tracer("t").startSpan("preset-span");
+      const traceId = span.spanContext().traceId;
+      span.end();
+      await handle.forceFlush();
+      const got = await client.query.waitForTrace(traceId, { timeoutMs: 15_000, intervalMs: 200 });
+      assert.equal(got.spans[0]?.name, "preset-span");
+    } finally {
+      await handle.shutdown();
+      await off.shutdown();
+    }
   });
 
   test("per-operation, rate-limiting, probabilistic and default strategies from the strategies file", async () => {

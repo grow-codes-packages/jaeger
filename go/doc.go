@@ -27,6 +27,11 @@
 //	sampler, err := client.NewRemoteSampler("orders", time.Minute)
 //	h, err := jaeger.InitTracing(ctx, cfg, jaeger.WithSampler(sampler))
 //
+// or set OTEL_TRACES_SAMPLER=parentbased_jaeger_remote and InitTracing starts (and
+// closes on Shutdown) a remote sampler from the sampling config. Sampling presets:
+// SamplingDevelopment, SamplingProduction, SamplingFollowParent, SamplingOff and
+// SamplingRatio(r), applied with preset.Apply(cfg).
+//
 // Every error is an *Error; compare codes with errors.Is against the Err*
 // sentinels (errors.Is(err, jaeger.ErrNotFound)). Credentials are wrapped in
 // Secret and never appear in errors, hooks or logs.

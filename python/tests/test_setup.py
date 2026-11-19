@@ -370,3 +370,32 @@ def test_jaeger_tracing_config_repr_redacts_headers() -> None:
     cfg = sdk.JaegerTracingConfig("s", headers={"Authorization": "Bearer top-secret-value"})
     assert "top-secret-value" not in repr(cfg)
     assert dataclasses.replace(cfg, remote_sampler=True).remote_sampler is True
+
+
+def test_ca_cert_alias_and_order() -> None:
+    cfg = env_config(
+        {
+            "GROW_JAEGER_OTLP_CA_CERT": "/alias.pem",
+            "OTEL_EXPORTER_OTLP_CERTIFICATE": "/otel.pem",
+        },
+        service_name="s",
+    )
+    assert cfg.tls == sdk.TlsConfig(ca_cert_path="/alias.pem")
+    cfg = env_config(
+        {"GROW_JAEGER_OTLP_CERTIFICATE": "/grow.pem", "GROW_JAEGER_OTLP_CA_CERT": "/alias.pem"},
+        service_name="s",
+    )
+    assert cfg.tls == sdk.TlsConfig(ca_cert_path="/grow.pem")
+
+
+def test_client_init_tracing_remote_sampler_uses_client_config() -> None:
+    c = sdk.JaegerClient(config(sampling_url="http://127.0.0.1:9/client-sampling"))
+    handle = c.init_tracing(
+        service_name="svc",
+        remote_sampler=sdk.RemoteSamplerOptions(poll_interval_s=3600),
+        env=False,
+        set_global=False,
+    )
+    assert handle.remote_sampler is not None
+    assert handle.remote_sampler.sampling_url == "http://127.0.0.1:9/client-sampling"
+    c.close()

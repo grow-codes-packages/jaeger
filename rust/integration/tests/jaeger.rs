@@ -51,6 +51,24 @@ async fn client_core() {
     assert_eq!(h.details["healthcheck.status"], "StatusOK");
     assert!(c.ping().await.unwrap() < Duration::from_secs(10));
     assert_eq!(c.server_version().await.unwrap(), "2.23.0");
+    let info = c.build_info().await.unwrap().expect("build info");
+    assert_eq!(info.git_version.as_deref(), Some("v2.23.0"));
+    // client.init_tracing: the handle exports to Jaeger and close() shuts it down
+    let service = unique("sdk-rust-client-tracing");
+    let handle = c
+        .init_tracing(
+            TracingConfig::new(service.clone()).with_set_global(false),
+            JaegerTracingOptions::default(),
+        )
+        .unwrap();
+    let mut span = handle
+        .tracer("t", None)
+        .start_with_context("client-op", &Context::new());
+    let trace_id = span.span_context().trace_id().to_string();
+    span.end();
+    handle.force_flush(None).await.unwrap();
+    let trace = c.query().wait_for_trace(&trace_id, wait()).await.unwrap();
+    assert_eq!(trace.spans[0].service_name, service);
     // metrics fallback alone (no UI version on a non-UI URL): point the query URL at metrics
     let metrics_only = JaegerClient::new(
         JaegerConfig::builder()
@@ -64,6 +82,7 @@ async fn client_core() {
     c.close().await;
     c.close().await;
     assert!(c.is_closed());
+    assert!(handle.is_shutdown());
 }
 
 #[tokio::test]
@@ -512,7 +531,9 @@ fn blocking_query_round_trip() {
     assert!(c.health().unwrap().healthy);
     c.ping().unwrap();
     assert_eq!(c.server_version().unwrap(), "2.23.0");
+    assert!(c.build_info().unwrap().is_some());
     let trace = c.wait_for_trace(&trace_id, wait()).unwrap();
+    assert_eq!(c.require_trace(&trace_id).unwrap().trace_id, trace_id);
     assert_eq!(trace.spans[0].service_name, service);
     assert!(c.get_trace(&trace_id).unwrap().is_some());
     assert!(c

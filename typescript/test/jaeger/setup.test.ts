@@ -13,6 +13,7 @@ import {
   JAEGER_OTLP_HTTP_ENDPOINT,
   JaegerClient,
   JaegerRemoteSampler,
+  SamplingPreset,
   initTracing,
   jaegerExporterFactory,
   resolveJaegerEndpoint,
@@ -69,7 +70,7 @@ describe("tracingConfigFromEnv", () => {
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://base:4318",
       OTEL_SERVICE_NAME: "svc-env",
       OTEL_RESOURCE_ATTRIBUTES: "team=core,service.name=ignored",
-      OTEL_PROPAGATORS: "tracecontext, b3 ,",
+      OTEL_PROPAGATORS: "tracecontext, b3 ,none,",
     };
     const c = tracingConfigFromEnv({}, env);
     expect(c).toMatchObject({
@@ -147,6 +148,56 @@ describe("tracingConfigFromEnv", () => {
     });
     expect(tracingConfigFromEnv({ batch: { maxQueueSize: 4 } }, {}).batch).toEqual({
       maxQueueSize: 4,
+    });
+  });
+
+  it("parity: GROW_JAEGER_SERVICE_NAME, GROW_JAEGER_OTLP_CA_CERT alias, resource merge", () => {
+    const env = {
+      GROW_JAEGER_SERVICE_NAME: "grow-name",
+      OTEL_SERVICE_NAME: "otel-name",
+      GROW_JAEGER_OTLP_CA_CERT: "/alias.pem",
+      OTEL_EXPORTER_OTLP_CERTIFICATE: "/otel.pem",
+      OTEL_RESOURCE_ATTRIBUTES: "service.name=res,team=env,region=eu",
+    };
+    const c = tracingConfigFromEnv({ resourceAttributes: { team: "explicit" } }, env);
+    expect(c.serviceName).toBe("grow-name");
+    expect(c.tls?.caCertPath).toBe("/alias.pem");
+    expect(c.resourceAttributes).toEqual({ team: "explicit", region: "eu" });
+    expect(
+      tracingConfigFromEnv(
+        {},
+        { GROW_JAEGER_OTLP_CERTIFICATE: "/grow.pem", GROW_JAEGER_OTLP_CA_CERT: "/alias.pem" },
+      ).tls?.caCertPath,
+    ).toBe("/grow.pem");
+    expect(tracingConfigFromEnv({}, { OTEL_SERVICE_NAME: "otel-name" }).serviceName).toBe(
+      "otel-name",
+    );
+    expect(
+      tracingConfigFromEnv({}, { OTEL_RESOURCE_ATTRIBUTES: "service.name=res" }).serviceName,
+    ).toBe("res");
+  });
+
+  it("SamplingPreset: development, production, followParent, off, ratio(r)", () => {
+    expect(SamplingPreset.development).toEqual({ sampler: "always_on", samplerRatio: 1 });
+    expect(SamplingPreset.production).toEqual({
+      sampler: "parentbased_traceidratio",
+      samplerRatio: 0.1,
+    });
+    expect(SamplingPreset.followParent).toEqual({
+      sampler: "parentbased_always_on",
+      samplerRatio: 1,
+    });
+    expect(SamplingPreset.off).toEqual({ sampler: "always_off", samplerRatio: 1 });
+    expect(SamplingPreset.ratio(0.25)).toEqual({
+      sampler: "parentbased_traceidratio",
+      samplerRatio: 0.25,
+    });
+    expect(SamplingPreset.ratio(0)).toEqual({ sampler: "parentbased_always_off", samplerRatio: 1 });
+    expect(SamplingPreset.ratio(2)).toBe(SamplingPreset.followParent);
+    expect(() => SamplingPreset.ratio(Number.NaN)).toThrow(ConfigError);
+    expect(resolveTracingConfig({ serviceName: "s", ...SamplingPreset.production })).toMatchObject({
+      sampler: "parentbased_traceidratio",
+      samplerRatio: 0.1,
     });
   });
 
@@ -339,7 +390,7 @@ describe("initTracing", () => {
     await expect(remote.refresh()).rejects.toMatchObject({ code: "CONFIG" });
   });
 
-  it("remote sampler: an existing sampler is not closed; parentBased false; true uses defaults", async () => {
+  it("remote sampler: an existing sampler is not closed; parentBased false; true uses the env sampling config", async () => {
     const sampler = new JaegerRemoteSampler({
       serviceName: "x",
       autoStart: false,
@@ -374,7 +425,7 @@ describe("initTracing", () => {
         },
       },
     );
-    expect(defaults.remoteSampler?.samplingUrl).toBe("http://127.0.0.1:5778/sampling");
+    expect(defaults.remoteSampler?.samplingUrl).toBe("http://127.0.0.1:1/sampling");
     await defaults.shutdown();
   });
 
@@ -398,6 +449,20 @@ describe("initTracing", () => {
     await client.close();
     expect(receiver.requests).toHaveLength(1);
     expect(() => client.initTracing({ serviceName: "x" })).toThrow(ConfigError);
+  });
+
+  it("client.initTracing: a remote sampler uses the client's sampling config", async () => {
+    const client = new JaegerClient({ samplingUrl: "http://127.0.0.1:1/client-sampling" });
+    const handle = client.initTracing(
+      {
+        serviceName: "svc-remote",
+        setGlobal: false,
+        remoteSampler: { autoStart: false },
+      },
+      { env: false },
+    );
+    expect(handle.remoteSampler?.samplingUrl).toBe("http://127.0.0.1:1/client-sampling");
+    await client.close();
   });
 });
 

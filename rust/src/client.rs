@@ -14,6 +14,19 @@ use crate::core::lifecycle::CloseGroup;
 use crate::core::{Error, ErrorCode, HealthStatus, HttpTransport, Response, Result};
 use crate::query::JaegerQueryClient;
 use crate::sampler::{fetch_strategy, JaegerRemoteSampler, RemoteSamplerOptions, SamplingStrategy};
+use crate::setup::{init_tracing_with_options, JaegerTracingHandle, JaegerTracingOptions};
+use crate::tracing::TracingConfig;
+
+/// Build information embedded in the Jaeger UI page (`JAEGER_VERSION`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JaegerBuildInfo {
+    /// For example `v2.23.0`.
+    pub git_version: Option<String>,
+    /// The commit the server was built from.
+    pub git_commit: Option<String>,
+    /// The build date.
+    pub build_date: Option<String>,
+}
 
 /// Async client for Jaeger. Cheap to clone (clones share one connection pool).
 #[derive(Debug, Clone)]
@@ -180,6 +193,15 @@ impl JaegerClient {
         }
     }
 
+    /// Build information parsed from the UI page (`GET /`); `None` when the page has none or the
+    /// UI is disabled (404).
+    pub async fn build_info(&self) -> Result<Option<JaegerBuildInfo>> {
+        Ok(match self.get_optional("/", "text/html").await? {
+            Some(resp) => parse_build_info(&String::from_utf8_lossy(resp.bytes())),
+            None => None,
+        })
+    }
+
     /// The Jaeger version without the leading `v` (for example `2.23.0`). It reads
     /// `JAEGER_VERSION` from the UI index page and falls back to the `target_info` metric of
     /// [`JaegerConfig::metrics_url`]. `UNSUPPORTED` when neither exposes a version (for example
@@ -261,6 +283,32 @@ impl JaegerClient {
         Ok(sampler)
     }
 
+    /// Starts OpenTelemetry tracing to Jaeger (see [`init_tracing_with_options`]); a remote
+    /// sampler started for `OTEL_TRACES_SAMPLER=jaeger_remote` uses this client's configuration
+    /// unless `options.sampler_config` is set. [`JaegerClient::close`] shuts the handle down.
+    /// Must be called inside a tokio runtime.
+    pub fn init_tracing(
+        &self,
+        config: TracingConfig,
+        options: JaegerTracingOptions,
+    ) -> Result<JaegerTracingHandle> {
+        if self.is_closed() {
+            return Err(Error::cancelled("initTracing: client is closed"));
+        }
+        let mut options = options;
+        if options.sampler_config.is_none() {
+            options.sampler_config = Some(self.config().clone());
+        }
+        let handle = init_tracing_with_options(config, options)?;
+        let h = handle.clone();
+        self.on_close(move || {
+            Box::pin(async move {
+                let _ = h.shutdown().await;
+            })
+        });
+        Ok(handle)
+    }
+
     /// Stops every remote sampler created by the client, runs the registered close work and
     /// closes the transport. Idempotent.
     pub async fn close(&self) {
@@ -300,6 +348,29 @@ pub(crate) fn parse_ui_version(html: &str) -> Option<String> {
     })
 }
 
+/// Parses the whole `JAEGER_VERSION = {…};` object from the UI index page.
+pub(crate) fn parse_build_info(html: &str) -> Option<JaegerBuildInfo> {
+    html.match_indices("JAEGER_VERSION").find_map(|(idx, key)| {
+        let rest = html[idx + key.len()..].trim_start();
+        let rest = rest.strip_prefix('=')?.trim_start();
+        if !rest.starts_with('{') {
+            return None;
+        }
+        let info: Value = serde_json::from_str(rest[..rest.find(';')?].trim_end()).ok()?;
+        let field = |k: &str| {
+            info.get(k)
+                .and_then(Value::as_str)
+                .filter(|v| !v.is_empty())
+                .map(str::to_owned)
+        };
+        Some(JaegerBuildInfo {
+            git_version: field("gitVersion"),
+            git_commit: field("gitCommit"),
+            build_date: field("buildDate"),
+        })
+    })
+}
+
 /// Parses `target_info{…,service_version="v2.23.0",…}` from Prometheus text.
 pub(crate) fn parse_target_info_version(text: &str) -> Option<String> {
     text.lines().find_map(|line| {
@@ -316,6 +387,20 @@ pub(crate) fn parse_target_info_version(text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn build_info_parser() {
+        let info = parse_build_info(
+            r#"JAEGER_VERSION = {"gitVersion":"v2.23.0","gitCommit":"abc","buildDate":""};"#,
+        )
+        .unwrap();
+        assert_eq!(info.git_version.as_deref(), Some("v2.23.0"));
+        assert_eq!(info.git_commit.as_deref(), Some("abc"));
+        assert_eq!(info.build_date, None);
+        assert_eq!(parse_build_info("JAEGER_VERSION = {broken};"), None);
+        assert_eq!(parse_build_info("JAEGER_VERSION {}"), None);
+        assert_eq!(parse_build_info("no version"), None);
+    }
 
     #[test]
     fn version_parsers() {

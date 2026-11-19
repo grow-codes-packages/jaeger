@@ -91,6 +91,9 @@ func TestQueryGetTrace(t *testing.T) {
 			t.Fatal(err)
 		}
 		checkFixtureTrace(t, tr)
+		if req, err := q.RequireTrace(t.Context(), fixtureTraceID); err != nil || req.TraceID != tr.TraceID {
+			t.Fatalf("require: %v", err)
+		}
 		h := spanByName(t, tr, "handle /orders")
 		if !reflect.DeepEqual(h.Attributes["array.attr"], []any{"a", "b"}) || h.Links[0].Attributes["link.kind"] != "follows" {
 			t.Fatalf("array/link attrs %#v %#v", h.Attributes, h.Links)
@@ -123,6 +126,12 @@ func TestQueryGetTrace(t *testing.T) {
 		q := newQueryClient(t, ts.URL, nil)
 		if tr, err := q.GetTrace(t.Context(), "ffffffffffffffffffffffffffffffff"); err != nil || tr != nil {
 			t.Fatalf("not found: %+v %v", tr, err)
+		}
+		if _, err := q.RequireTrace(t.Context(), "ffffffffffffffffffffffffffffffff"); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("require not found: %v", err)
+		}
+		if _, err := q.RequireTrace(t.Context(), "xyz"); !errors.Is(err, ErrValidation) {
+			t.Fatalf("require invalid: %v", err)
 		}
 		_, err := q.GetTrace(t.Context(), "abc")
 		if !errors.Is(err, ErrValidation) || !strings.Contains(err.Error(), "malformed parameter") || asError(t, err).HTTPStatus != 400 {
@@ -453,13 +462,16 @@ func TestQueryServicesAndOperations(t *testing.T) {
 	if ops, err := q.ListOperations(t.Context(), "dup"); err != nil || !reflect.DeepEqual(ops, []string{"a", "b"}) {
 		t.Fatalf("dedupe %v %v", ops, err)
 	}
-	detailed, err := q.ListOperationsWith(t.Context(), "dup", ListOperationsOptions{})
+	detailed, err := q.GetOperations(t.Context(), "dup", ListOperationsOptions{})
 	if err != nil || len(detailed) != 3 || detailed[1] != (Operation{Name: "b", SpanKind: SpanKindClient}) || detailed[2].SpanKind != SpanKindServer {
 		t.Fatalf("detailed %+v %v", detailed, err)
 	}
-	server, err := q.ListOperationsWith(t.Context(), "sdk-wk-86837b62", ListOperationsOptions{SpanKind: "SERVER"})
+	server, err := q.GetOperations(t.Context(), "sdk-wk-86837b62", ListOperationsOptions{SpanKind: "SERVER"})
 	if err != nil || len(server) != 1 || server[0] != (Operation{Name: "handle /orders", SpanKind: SpanKindServer}) {
 		t.Fatalf("server ops %+v %v", server, err)
+	}
+	if names, err := q.ListOperationsWith(t.Context(), "sdk-wk-86837b62", ListOperationsOptions{SpanKind: "SERVER"}); err != nil || !reflect.DeepEqual(names, []string{"handle /orders"}) {
+		t.Fatalf("server names %v %v", names, err)
 	}
 	if got := ts.request(int(ts.calls.Load()) - 1).URL.Query().Get("spanKind"); got != "server" {
 		t.Fatalf("spanKind sent as %q", got)
@@ -472,7 +484,7 @@ func TestQueryServicesAndOperations(t *testing.T) {
 	if _, err := q.ListOperations(t.Context(), " "); !errors.Is(err, ErrValidation) {
 		t.Fatalf("empty service: %v", err)
 	}
-	if _, err := q.ListOperationsWith(t.Context(), "s", ListOperationsOptions{SpanKind: SpanKindUnspecified}); !errors.Is(err, ErrValidation) {
+	if _, err := q.GetOperations(t.Context(), "s", ListOperationsOptions{SpanKind: SpanKindUnspecified}); !errors.Is(err, ErrValidation) {
 		t.Fatalf("bad kind: %v", err)
 	}
 	if ts.calls.Load() != calls {

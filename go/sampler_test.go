@@ -245,12 +245,24 @@ func TestRemoteSampler(t *testing.T) {
 			t.Fatal(err)
 		}
 		advance(10 * time.Second)
-		if sampled(s, "g") {
-			t.Fatal("rate 0 samples nothing")
+		if !sampled(s, "g") || sampled(s, "g2") {
+			t.Fatal("rate 0 lets the first trace through, then none")
+		}
+		advance(10 * time.Second)
+		if sampled(s, "g3") {
+			t.Fatal("rate 0 never refills")
 		}
 		srv.set("svc-r", `{"strategyType":"RATE_LIMITING","probabilisticSampling":{"samplingRate":1}}`)
 		if err := s.Refresh(t.Context()); err != nil || !sampled(s, "h") {
 			t.Fatalf("rate limiting without limiter falls back to probability: %v", err)
+		}
+		srv.set("svc-r", `{"strategyType":"PROBABILISTIC","probabilisticSampling":{"samplingRate":1},"rateLimitingSampling":{"maxTracesPerSecond":1}}`)
+		if err := s.Refresh(t.Context()); err != nil || !sampled(s, "i") || sampled(s, "j") {
+			t.Fatalf("rateLimitingSampling applies whenever present: %v", err)
+		}
+		srv.set("svc-r", `{"strategyType":"RATE_LIMITING"}`)
+		if err := s.Refresh(t.Context()); err != nil || !strings.Contains(s.state.Load().fallback.Description(), "0.001") {
+			t.Fatalf("no service-level strategy uses the initial rate (0.001): %v", err)
 		}
 	})
 

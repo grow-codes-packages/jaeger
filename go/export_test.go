@@ -69,18 +69,21 @@ func TestTracingConfigFromEnv(t *testing.T) {
 				t.Fatalf("%s: got %q want %q (%v)", protocol, c.Endpoint, want, err)
 			}
 		}
-		check(ProtocolHTTPProtobuf, "http://grow-http:4318")
+		check(ProtocolHTTPProtobuf, "http://grow-http:4318/v1/traces")
 		check(ProtocolGRPC, "http://grow-grpc:4317")
 		delete(env, EnvPrefix+"OTLP_HTTP_ENDPOINT")
 		delete(env, EnvPrefix+"OTLP_GRPC_ENDPOINT")
-		check(ProtocolHTTPProtobuf, "http://grow:1")
+		check(ProtocolHTTPProtobuf, "http://grow:1/v1/traces")
 		delete(env, EnvPrefix+"OTLP_ENDPOINT")
 		check(ProtocolGRPC, "http://traces:2/custom")
 		delete(env, "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
 		check(ProtocolHTTPProtobuf, "http://base:3/v1/traces")
 		check(ProtocolGRPC, "http://base:3/")
-		if c, _ := TracingConfigFromEnv(TracingConfig{Endpoint: "http://explicit:9"}, env); c.Endpoint != "http://explicit:9" {
+		if c, _ := TracingConfigFromEnv(TracingConfig{Endpoint: "http://explicit:9/x"}, env); c.Endpoint != "http://explicit:9/x" {
 			t.Fatal("explicit endpoint wins")
+		}
+		if c, _ := TracingConfigFromEnv(TracingConfig{Endpoint: "http://explicit:9"}, env); c.Endpoint != "http://explicit:9/v1/traces" {
+			t.Fatal("explicit HTTP base gets /v1/traces")
 		}
 	})
 
@@ -141,7 +144,7 @@ func TestTracingConfigFromEnv(t *testing.T) {
 			t.Fatal("explicit sampler/propagators win")
 		}
 		for _, s := range []string{"always_on", "jaeger_remote", "parentbased_jaeger_remote"} {
-			c, err := TracingConfigFromEnv(TracingConfig{}, map[string]string{"OTEL_TRACES_SAMPLER": s, "OTEL_TRACES_SAMPLER_ARG": "x"})
+			c, err := TracingConfigFromEnv(TracingConfig{}, map[string]string{"OTEL_TRACES_SAMPLER": s, "OTEL_TRACES_SAMPLER_ARG": "endpoint=http://s:5778/sampling"})
 			if err != nil || (s == "always_on") != (c.Sampler == SamplerAlwaysOn) {
 				t.Fatalf("%s: %v %s", s, err, c.Sampler)
 			}
@@ -150,6 +153,9 @@ func TestTracingConfigFromEnv(t *testing.T) {
 			{"OTEL_TRACES_SAMPLER": "sometimes"},
 			{"OTEL_TRACES_SAMPLER": "traceidratio", "OTEL_TRACES_SAMPLER_ARG": "2"},
 			{"OTEL_TRACES_SAMPLER": "traceidratio", "OTEL_TRACES_SAMPLER_ARG": "half"},
+			{"OTEL_TRACES_SAMPLER": "jaeger_remote", "OTEL_TRACES_SAMPLER_ARG": "half"},
+			{"OTEL_TRACES_SAMPLER": "jaeger_remote", "OTEL_TRACES_SAMPLER_ARG": "pollingIntervalMs=soon"},
+			{"OTEL_TRACES_SAMPLER": "jaeger_remote", "OTEL_TRACES_SAMPLER_ARG": "initialSamplingRate=2"},
 		} {
 			_, err := TracingConfigFromEnv(TracingConfig{}, bad)
 			if !errors.Is(err, ErrConfig) || strings.Contains(err.Error(), "sometimes") || strings.Contains(err.Error(), "half") {
@@ -157,6 +163,53 @@ func TestTracingConfigFromEnv(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("parity: TLS env names, timeout, service.name fallback", func(t *testing.T) {
+		env := map[string]string{
+			EnvPrefix + "OTLP_CA_CERT":                     "/alias.pem",
+			"OTEL_EXPORTER_OTLP_CERTIFICATE":               "/otel.pem",
+			EnvPrefix + "OTLP_CLIENT_CERTIFICATE":          "/c.pem",
+			"OTEL_EXPORTER_OTLP_TRACES_CLIENT_KEY":         "/k.pem",
+			"OTEL_EXPORTER_OTLP_TIMEOUT":                   "10s",
+			"OTEL_RESOURCE_ATTRIBUTES":                     "service.name=res,team=env",
+			"OTEL_EXPORTER_OTLP_TRACES_CLIENT_CERTIFICATE": "/otel-c.pem",
+		}
+		c, err := TracingConfigFromEnv(TracingConfig{}, env)
+		if err != nil || c.TLS.CACertPath != "/alias.pem" || c.TLS.ClientCertPath != "/c.pem" || c.TLS.ClientKeyPath != "/k.pem" ||
+			c.Batch.ExportTimeout != 10*time.Second || c.ServiceName != "res" ||
+			!reflect.DeepEqual(c.ResourceAttributes, map[string]any{"team": "env"}) {
+			t.Fatalf("%v %+v %+v", err, c, c.TLS)
+		}
+		env[EnvPrefix+"OTLP_CERTIFICATE"] = "/grow.pem"
+		if c, _ := TracingConfigFromEnv(TracingConfig{TLS: TLSConfig{ClientKeyPath: "/x.pem"}, Batch: TracingBatchOptions{ExportTimeout: time.Second}}, env); c.TLS.CACertPath != "/grow.pem" ||
+			c.TLS.ClientKeyPath != "/x.pem" || c.Batch.ExportTimeout != time.Second {
+			t.Fatalf("explicit fields win, CERTIFICATE before CA_CERT: %+v", c.TLS)
+		}
+		for _, bad := range []string{"soon", "0"} {
+			_, err := TracingConfigFromEnv(TracingConfig{}, map[string]string{"OTEL_EXPORTER_OTLP_TIMEOUT": bad})
+			if !errors.Is(err, ErrConfig) || !strings.Contains(err.Error(), "OTEL_EXPORTER_OTLP_TIMEOUT") {
+				t.Fatalf("%s: %v", bad, err)
+			}
+		}
+	})
+}
+
+func TestResolveEndpoint(t *testing.T) {
+	for _, tc := range []struct {
+		p    Protocol
+		in   string
+		want string
+	}{
+		{ProtocolHTTPProtobuf, "", DefaultOTLPHTTPEndpoint},
+		{ProtocolGRPC, " ", DefaultOTLPGRPCEndpoint},
+		{ProtocolHTTPProtobuf, "http://j:4318/", "http://j:4318/v1/traces"},
+		{ProtocolHTTPProtobuf, "http://j:4318/custom", "http://j:4318/custom"},
+		{ProtocolGRPC, "http://j:4317", "http://j:4317"},
+	} {
+		if got := ResolveEndpoint(tc.p, tc.in); got != tc.want {
+			t.Fatalf("%s %q: %q", tc.p, tc.in, got)
+		}
+	}
 }
 
 func TestSamplingPresets(t *testing.T) {
@@ -195,7 +248,8 @@ func TestInitTracing(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if seen.ServiceName != "svc-env" || seen.Endpoint != "http://jaeger:4318" || seen.Protocol != ProtocolHTTPProtobuf {
+		if seen.ServiceName != "svc-env" || seen.Endpoint != "http://jaeger:4318/v1/traces" || seen.Protocol != ProtocolHTTPProtobuf ||
+			h.Endpoint() != seen.Endpoint || h.RemoteSampler() != nil {
 			t.Fatalf("resolved %s", seen)
 		}
 		_, span := h.Tracer("t").Start(ctx, "op")
@@ -269,6 +323,75 @@ func TestInitTracing(t *testing.T) {
 			t.Fatalf("parent-based wrapping: %v", spans)
 		}
 		_ = h.Shutdown(ctx)
+	})
+
+	t.Run("jaeger_remote from the environment", func(t *testing.T) {
+		srv := newSamplingServer(t)
+		srv.set("svc-remote", `{"strategyType":"PROBABILISTIC","probabilisticSampling":{"samplingRate":1},"operationSampling":{"defaultSamplingProbability":1,"perOperationStrategies":[{"operation":"/health","probabilisticSampling":{"samplingRate":0}}]}}`)
+		exp := tracetest.NewInMemoryExporter()
+		env := map[string]string{
+			"OTEL_TRACES_SAMPLER":      "jaeger_remote",
+			"OTEL_TRACES_SAMPLER_ARG":  "pollingIntervalMs=3600000,initialSamplingRate=0",
+			EnvPrefix + "SAMPLING_URL": srv.URL + "/sampling",
+			EnvPrefix + "TOKEN":        "s3cret-token",
+			EnvPrefix + "SERVICE_NAME": "svc-remote",
+		}
+		h, err := InitTracing(ctx, TracingConfig{DisableSetGlobal: true}, WithEnv(env), WithExporterFactory(memoryFactory(exp, nil)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		remote := h.RemoteSampler()
+		if remote == nil || remote.Refresh(ctx) != nil {
+			t.Fatal("remote sampler not created from the sampling config")
+		}
+		if got := srv.request(int(srv.calls.Load()) - 1).Header.Get("Authorization"); got != "Bearer s3cret-token" {
+			t.Fatalf("token not sent to the sampling endpoint: %q", got)
+		}
+		_, health := h.Tracer("t").Start(ctx, "/health")
+		health.End()
+		_, kept := h.Tracer("t").Start(ctx, "kept")
+		kept.End()
+		_ = h.ForceFlush(ctx)
+		if spans := exp.GetSpans(); len(spans) != 1 || spans[0].Name != "kept" {
+			t.Fatalf("remote strategy not applied: %v", spans)
+		}
+		if err := h.Shutdown(ctx); err != nil {
+			t.Fatal(err)
+		}
+		_ = h.Shutdown(ctx)
+		select {
+		case <-remote.done:
+		default:
+			t.Fatal("owned sampler not closed by Shutdown")
+		}
+
+		// parentbased_jaeger_remote + endpoint in the arg + WithSamplerConfig.
+		env = map[string]string{
+			"OTEL_TRACES_SAMPLER":     "parentbased_jaeger_remote",
+			"OTEL_TRACES_SAMPLER_ARG": "endpoint=" + srv.URL + "/sampling",
+		}
+		h, err = InitTracing(ctx, TracingConfig{ServiceName: "svc-remote", DisableSetGlobal: true}, WithEnv(env),
+			WithSamplerConfig(Config{SamplingURL: "http://127.0.0.1:1/sampling"}), WithExporterFactory(memoryFactory(exp, nil)))
+		if err != nil || h.RemoteSampler() == nil || h.RemoteSampler().Refresh(ctx) != nil {
+			t.Fatalf("arg endpoint wins over the sampler config: %v", err)
+		}
+		_ = h.Shutdown(ctx)
+
+		// Errors: a bad sampling config, an invalid tracing config, a failing factory.
+		if _, err := InitTracing(ctx, TracingConfig{ServiceName: "s"}, WithEnv(map[string]string{"OTEL_TRACES_SAMPLER": "jaeger_remote", EnvPrefix + "SAMPLING_URL": "ftp://x"})); !errors.Is(err, ErrConfig) {
+			t.Fatalf("bad sampling url: %v", err)
+		}
+		if _, err := InitTracing(ctx, TracingConfig{ServiceName: "s"}, WithEnv(map[string]string{"OTEL_TRACES_SAMPLER": "jaeger_remote"}), WithSamplerConfig(Config{SamplingURL: "ftp://x"})); !errors.Is(err, ErrConfig) {
+			t.Fatalf("bad sampler config: %v", err)
+		}
+		if _, err := InitTracing(ctx, TracingConfig{}, WithEnv(map[string]string{"OTEL_TRACES_SAMPLER": "jaeger_remote"})); !errors.Is(err, ErrConfig) {
+			t.Fatalf("no service name: %v", err)
+		}
+		boom := errors.New("boom")
+		if _, err := InitTracing(ctx, TracingConfig{ServiceName: "s"}, WithEnv(map[string]string{"OTEL_TRACES_SAMPLER": "jaeger_remote"}),
+			WithExporterFactory(func(context.Context, TracingConfig) (sdktrace.SpanExporter, error) { return nil, boom })); !errors.Is(err, boom) {
+			t.Fatalf("factory error: %v", err)
+		}
 	})
 
 	t.Run("otlp http export", func(t *testing.T) {

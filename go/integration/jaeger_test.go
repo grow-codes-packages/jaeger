@@ -55,7 +55,7 @@ func runID(t *testing.T) string {
 	return hex.EncodeToString(b)
 }
 
-func startTracing(t *testing.T, service string, protocol jaeger.Protocol, opts ...jaeger.TracingOption) *jaeger.TracingHandle {
+func startTracing(t *testing.T, service string, protocol jaeger.Protocol, opts ...jaeger.TracingOption) *jaeger.TracingSetup {
 	t.Helper()
 	h, err := jaeger.InitTracing(context.Background(), jaeger.TracingConfig{
 		ServiceName: service, ServiceVersion: "1.2.3", Environment: "sdk-test",
@@ -110,6 +110,22 @@ func TestClientCore(t *testing.T) {
 	v, err := c.ServerVersion(ctx)
 	if err != nil || v != "2.23.0" {
 		t.Fatalf("ServerVersion: %q %v", v, err)
+	}
+	if info, err := c.BuildInfo(ctx); err != nil || info == nil || info.GitVersion != "v"+v {
+		t.Fatalf("BuildInfo: %+v %v", info, err)
+	}
+	// Client.InitTracing: the handle exports to Jaeger and Close shuts it down.
+	tracedService := "sdk-go-client-" + runID(t)
+	th, err := c.InitTracing(ctx, jaeger.TracingConfig{ServiceName: tracedService, DisableSetGlobal: true,
+		Batch: jaeger.TracingBatchOptions{ScheduledDelay: 100 * time.Millisecond}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, span := th.Tracer("t").Start(ctx, "client-op")
+	span.End()
+	_ = th.ForceFlush(ctx)
+	if tr := waitTrace(t, c.Query(), span.SpanContext().TraceID().String(), 1); tr.Spans[0].ServiceName != tracedService {
+		t.Fatalf("client tracing: %+v", tr.Spans)
 	}
 	// The metrics fallback finds the same version when the UI page has none.
 	metricsOnly, err := jaeger.NewClient(jaeger.Config{CommonConfig: jaeger.CommonConfig{URL: cfg.MetricsURL}, MetricsURL: cfg.MetricsURL})
@@ -228,6 +244,12 @@ func TestTraceRoundTrip(t *testing.T) {
 			if missing, err := q.GetTrace(ctx, "ffffffffffffffffffffffffffffff01"); err != nil || missing != nil {
 				t.Fatalf("missing trace: %+v %v", missing, err)
 			}
+			if req, err := q.RequireTrace(ctx, traceID); err != nil || req.TraceID != traceID {
+				t.Fatalf("RequireTrace %v", err)
+			}
+			if _, err := q.RequireTrace(ctx, "ffffffffffffffffffffffffffffff01"); !errors.Is(err, jaeger.ErrNotFound) {
+				t.Fatalf("RequireTrace missing: %v", err)
+			}
 
 			found, err := q.FindTraces(ctx, jaeger.TraceSearchQuery{
 				Service: service, Operation: rootName, Tags: map[string]string{"order.id": run},
@@ -254,9 +276,13 @@ func TestTraceRoundTrip(t *testing.T) {
 			if err != nil || !slices.Contains(ops, rootName) || !slices.Contains(ops, "db.query") {
 				t.Fatalf("ListOperations %v %v", ops, err)
 			}
-			server, err := q.ListOperationsWith(ctx, service, jaeger.ListOperationsOptions{SpanKind: "SERVER"})
+			server, err := q.GetOperations(ctx, service, jaeger.ListOperationsOptions{SpanKind: "SERVER"})
 			if err != nil || len(server) != 1 || server[0] != (jaeger.Operation{Name: rootName, SpanKind: jaeger.SpanKindServer}) {
-				t.Fatalf("ListOperationsWith %+v %v", server, err)
+				t.Fatalf("GetOperations %+v %v", server, err)
+			}
+			names, err := q.ListOperationsWith(ctx, service, jaeger.ListOperationsOptions{SpanKind: "server"})
+			if err != nil || !slices.Equal(names, []string{rootName}) {
+				t.Fatalf("ListOperationsWith %v %v", names, err)
 			}
 		})
 	}
@@ -469,6 +495,25 @@ func TestRemoteSampling(t *testing.T) {
 	_ = h.ForceFlush(ctx)
 	if tr := waitTrace(t, c.Query(), s.SpanContext().TraceID().String(), 1); tr.Spans[0].ServiceName != service {
 		t.Fatalf("remote-sampled span %+v", tr.Spans)
+	}
+
+	// OTEL_TRACES_SAMPLER=parentbased_jaeger_remote: InitTracing builds and owns the
+	// sampler (URL from the sampler arg) and applies the fixture's per-operation rule.
+	t.Setenv("OTEL_TRACES_SAMPLER", "parentbased_jaeger_remote")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "endpoint="+fixtureURL+",initialSamplingRate=0")
+	envHandle := startTracing(t, "sdk-sampling-ops", jaeger.ProtocolHTTPProtobuf)
+	remote := envHandle.RemoteSampler()
+	if remote == nil || remote.Refresh(ctx) != nil {
+		t.Fatal("jaeger_remote from the environment did not start a sampler")
+	}
+	if _, s := envHandle.Tracer("t").Start(ctx, "/health"); s.IsRecording() {
+		t.Fatal("env remote sampler must drop /health")
+	}
+	_, envSpan := envHandle.Tracer("t").Start(ctx, "GET /fast")
+	envSpan.End()
+	if envSpan.SpanContext().IsSampled() {
+		_ = envHandle.ForceFlush(ctx)
+		waitTrace(t, c.Query(), envSpan.SpanContext().TraceID().String(), 1)
 	}
 	_ = c.Close() // stops opsSampler too
 }

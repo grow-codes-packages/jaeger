@@ -401,7 +401,7 @@ public final class JaegerTracing {
     if (propagators != null && explicit.propagators().equals(TracingConfig.DEFAULT_PROPAGATORS)) {
       List<String> list = new ArrayList<>();
       for (String s : propagators[1].split(",")) {
-        if (!s.isBlank()) {
+        if (!s.isBlank() && !s.trim().equals("none")) {
           list.add(s.trim());
         }
       }

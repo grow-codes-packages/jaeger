@@ -23,6 +23,7 @@ type Client struct {
 
 	mu       sync.Mutex
 	samplers []*RemoteSampler
+	handles  []*TracingSetup
 	closed   bool
 
 	closeOnce sync.Once
@@ -166,6 +167,41 @@ var (
 	targetInfoRe    = regexp.MustCompile(`target_info\{[^}]*service_version="([^"]+)"`)
 )
 
+// BuildInfo is the build information embedded in the Jaeger UI page (JAEGER_VERSION).
+type BuildInfo struct {
+	// GitVersion is for example "v2.23.0".
+	GitVersion string `json:"gitVersion"`
+	// GitCommit is the commit the server was built from.
+	GitCommit string `json:"gitCommit"`
+	// BuildDate is the build date.
+	BuildDate string `json:"buildDate"`
+}
+
+// BuildInfo returns the build information parsed from the UI page (GET /), or nil
+// when the page has none or the UI is disabled (404).
+func (c *Client) BuildInfo(ctx context.Context) (*BuildInfo, error) {
+	res, err := c.transport.do(ctx, &request{
+		Method: http.MethodGet, Path: "/", Header: mergeHeader(c.authHeader(), "Accept", "text/html"), Operation: "serverVersion",
+	})
+	if err != nil {
+		if CodeOf(err) == ErrorCodeNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	m := jaegerVersionRe.FindSubmatch(res.Body)
+	if m == nil {
+		return nil, nil
+	}
+	var raw map[string]any
+	_ = json.Unmarshal(m[1], &raw)
+	text := func(k string) string { v, _ := raw[k].(string); return v }
+	if raw == nil {
+		return nil, nil
+	}
+	return &BuildInfo{GitVersion: text("gitVersion"), GitCommit: text("gitCommit"), BuildDate: text("buildDate")}, nil
+}
+
 // ServerVersion returns the Jaeger version without the leading "v" (for example
 // "2.23.0"). It reads JAEGER_VERSION from the UI index page and falls back to the
 // target_info metric of Config.MetricsURL. UNSUPPORTED when neither exposes a version
@@ -189,7 +225,7 @@ func (c *Client) ServerVersion(ctx context.Context) (string, error) {
 		}
 	}
 	if c.metrics != nil {
-		mres, merr := c.metrics.t.do(ctx, c.metrics.request(op, http.Header{"Accept": {"text/plain"}}, nil))
+		mres, merr := c.metrics.t.do(ctx, c.metrics.request(op, mergeHeader(c.authHeader(), "Accept", "text/plain"), nil))
 		if merr != nil && CodeOf(merr) != ErrorCodeNotFound {
 			return "", merr
 		}
@@ -230,15 +266,36 @@ func (c *Client) NewRemoteSampler(service string, pollInterval time.Duration, op
 	return s, nil
 }
 
-// Close stops every remote sampler created by the client and releases its
-// connections. It is idempotent.
+// InitTracing starts OpenTelemetry tracing to Jaeger (see the package-level
+// InitTracing); a remote sampler started for OTEL_TRACES_SAMPLER=jaeger_remote uses
+// this client's configuration (WithSamplerConfig given in opts wins). Close shuts the
+// handle down.
+func (c *Client) InitTracing(ctx context.Context, cfg TracingConfig, opts ...TracingOption) (*TracingSetup, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return nil, &Error{Code: ErrorCodeCancelled, Message: "initTracing: client is closed"}
+	}
+	h, err := InitTracing(ctx, cfg, append([]TracingOption{WithSamplerConfig(c.cfg)}, opts...)...)
+	if err != nil {
+		return nil, err
+	}
+	c.handles = append(c.handles, h)
+	return h, nil
+}
+
+// Close shuts down the tracing handles (flushing them) and stops the remote samplers
+// created by the client, then releases its connections. It is idempotent.
 func (c *Client) Close() error {
 	c.closeOnce.Do(func() {
 		c.mu.Lock()
 		c.closed = true
-		samplers := c.samplers
-		c.samplers = nil
+		samplers, handles := c.samplers, c.handles
+		c.samplers, c.handles = nil, nil
 		c.mu.Unlock()
+		for _, h := range handles {
+			_ = h.Shutdown(context.Background())
+		}
 		for _, s := range samplers {
 			_ = s.Close()
 		}

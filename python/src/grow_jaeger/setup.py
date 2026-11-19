@@ -185,10 +185,11 @@ class _Env:
                 return name, value.strip()
         return None
 
-    def otlp(self, suffix: str) -> tuple[str, str] | None:
-        """``GROW_JAEGER_OTLP_<s>`` > ``OTEL_EXPORTER_OTLP_TRACES_<s>`` >
-        ``OTEL_EXPORTER_OTLP_<s>``."""
-        return self.hit(_GROW_OTLP + suffix, _OTEL_TRACES + suffix, _OTEL + suffix)
+    def otlp(self, suffix: str, *grow_aliases: str) -> tuple[str, str] | None:
+        """``GROW_JAEGER_OTLP_<s>`` > ``GROW_JAEGER_OTLP_<alias>``… >
+        ``OTEL_EXPORTER_OTLP_TRACES_<s>`` > ``OTEL_EXPORTER_OTLP_<s>``."""
+        aliases = tuple(_GROW_OTLP + a for a in grow_aliases)
+        return self.hit(_GROW_OTLP + suffix, *aliases, _OTEL_TRACES + suffix, _OTEL + suffix)
 
 
 def _key_values(raw: str, name: str) -> dict[str, str]:
@@ -281,12 +282,12 @@ def _env_values(env: Mapping[str, str], protocol_hint: str | None) -> dict[str, 
             raise ConfigError(f"config: {timeout[0]} is not a valid duration")
         values["export_timeout_s"] = seconds
     tls: dict[str, str] = {}
-    for field, suffix in (
-        ("ca_cert_path", "CERTIFICATE"),
-        ("client_cert_path", "CLIENT_CERTIFICATE"),
-        ("client_key_path", "CLIENT_KEY"),
+    for field, suffix, aliases in (
+        ("ca_cert_path", "CERTIFICATE", ("CA_CERT",)),
+        ("client_cert_path", "CLIENT_CERTIFICATE", ()),
+        ("client_key_path", "CLIENT_KEY", ()),
     ):
-        hit = chain.otlp(suffix)
+        hit = chain.otlp(suffix, *aliases)
         if hit is not None:
             tls[field] = hit[1]
     if tls:
@@ -356,8 +357,8 @@ def tracing_config_from_env(
     ``headers``                   ``…_HEADERS`` (``k=v,k2=v2``, percent-decoded)
     ``compression``               ``…_COMPRESSION`` (``gzip``, ``none``)
     ``batch.export_timeout_s``    ``…_TIMEOUT`` (milliseconds or ``10s``)
-    ``tls``                       ``…_CERTIFICATE``, ``…_CLIENT_CERTIFICATE``,
-                                  ``…_CLIENT_KEY`` (paths)
+    ``tls``                       ``…_CERTIFICATE`` (also ``GROW_JAEGER_OTLP_CA_CERT``),
+                                  ``…_CLIENT_CERTIFICATE``, ``…_CLIENT_KEY`` (paths)
     ``service_name``              ``GROW_JAEGER_SERVICE_NAME``, ``OTEL_SERVICE_NAME``,
                                   ``service.name`` in ``OTEL_RESOURCE_ATTRIBUTES``
     ``resource_attributes``       ``OTEL_RESOURCE_ATTRIBUTES`` (explicit keys win)
@@ -550,12 +551,13 @@ def _remote_sampler(
     setting: JaegerRemoteSampler | RemoteSamplerOptions | bool,
     service_name: str,
     env: Mapping[str, str] | Literal[False] | None,
+    sampler_config: JaegerConfig | None = None,
 ) -> tuple[JaegerRemoteSampler, bool, bool]:
     """``(sampler, owned, parent_based)``."""
     if isinstance(setting, JaegerRemoteSampler):
         return setting, False, True
     options = setting if isinstance(setting, RemoteSamplerOptions) else RemoteSamplerOptions()
-    config = options.config
+    config = options.config or sampler_config
     if config is None:
         config = JaegerConfig() if env is False else JaegerConfig.from_env(env)
     sampler = JaegerRemoteSampler(
@@ -575,6 +577,7 @@ def init_tracing(
     propagator_factories: Mapping[str, PropagatorFactory] | None = None,
     span_processors: Sequence[SpanProcessor] = (),
     id_generator: IdGenerator | None = None,
+    sampler_config: JaegerConfig | None = None,
     **overrides: Any,
 ) -> JaegerTracingHandle:
     """Set up OpenTelemetry tracing for Jaeger (SPEC §5).
@@ -585,7 +588,9 @@ def init_tracing(
     field left unset (see :func:`tracing_config_from_env`; ``env`` defaults to
     ``os.environ``, ``env=False`` ignores it). With ``remote_sampler`` the Jaeger remote
     strategy decides sampling (as the root of a ``ParentBased`` sampler unless
-    ``parent_based=False``).
+    ``parent_based=False``). A remote sampler created here takes its ``sampling_url``, token
+    and transport settings from ``sampler_config`` (default :meth:`JaegerConfig.from_env`
+    over the same environment; :meth:`JaegerClient.init_tracing` passes the client's config).
 
     Raises :class:`ConfigError` for invalid settings.
     """
@@ -606,7 +611,9 @@ def init_tracing(
     if remote is None or remote is False:
         return JaegerTracingHandle(base, endpoint=endpoint)
     try:
-        sampler, owned, parent_based = _remote_sampler(remote, effective.service_name, env)
+        sampler, owned, parent_based = _remote_sampler(
+            remote, effective.service_name, env, sampler_config
+        )
     except BaseException:
         base.shutdown()
         raise

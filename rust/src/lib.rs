@@ -74,7 +74,7 @@ pub use crate::setup::{
     DEFAULT_TRACING_PROTOCOL,
 };
 
-pub use crate::client::JaegerClient;
+pub use crate::client::{JaegerBuildInfo, JaegerClient};
 
 pub use crate::config::JaegerConfig;
 

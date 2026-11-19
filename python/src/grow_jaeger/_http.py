@@ -53,13 +53,17 @@ def auth_headers(config: JaegerConfig) -> dict[str, str]:
     return {"Authorization": f"Bearer {config.token.reveal()}"}
 
 
-def get(path: str, operation: str, config: JaegerConfig, **kw: Any) -> Request:
-    """A GET request that returns error responses for :func:`classify` (retries still apply)."""
+def get(
+    path: str, operation: str, config: JaegerConfig, *, auth: bool = True, **kw: Any
+) -> Request:
+    """A GET request that returns error responses for :func:`classify` (retries still apply).
+
+    ``auth=False`` never sends the token (``health()`` is unauthenticated)."""
     return Request(
         "GET",
         path,
         operation=operation,
-        headers=auth_headers(config),
+        headers=auth_headers(config) if auth else {},
         raise_for_status=False,
         **kw,
     )

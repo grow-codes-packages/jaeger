@@ -116,7 +116,7 @@ class JaegerTracingTest {
     env.put("OTEL_RESOURCE_ATTRIBUTES", "team=a,region=eu,service.name=ignored");
     env.put("OTEL_TRACES_SAMPLER", "parentbased_traceidratio");
     env.put("OTEL_TRACES_SAMPLER_ARG", "0.25");
-    env.put("OTEL_PROPAGATORS", "tracecontext, b3 ,,");
+    env.put("OTEL_PROPAGATORS", "tracecontext, b3 ,none,");
     TracingConfig c = JaegerTracing.resolveConfig(cfg("s").build(), env);
     assertThat(c.protocol()).isEqualTo(Protocol.GRPC);
     assertThat(c.endpoint()).contains("http://jaeger:4317");

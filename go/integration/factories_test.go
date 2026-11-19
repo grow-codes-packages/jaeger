@@ -41,7 +41,7 @@ func factories(t *testing.T) testkit.Factories {
 			if err != nil {
 				return testkit.TracingTarget{}, err
 			}
-			return testkit.TracingTarget{Handle: h, Query: client.Query()}, nil
+			return testkit.TracingTarget{Handle: h.TracingHandle, Query: client.Query()}, nil
 		}),
 	}
 }

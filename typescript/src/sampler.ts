@@ -92,6 +92,27 @@ export function parseSamplingStrategy(body: unknown): JaegerSamplingStrategy {
   return out;
 }
 
+/**
+ * Fetches the strategy of `service` once: `GET {samplingUrl}?service=<service>`. A blank
+ * service throws `ValidationError` without a request; a malformed body throws
+ * `ValidationError`.
+ */
+export async function fetchSamplingStrategy(
+  transport: HttpTransport,
+  samplingUrl: string,
+  service: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<JaegerSamplingStrategy> {
+  if (typeof service !== "string" || service.trim() === "")
+    throw new ValidationError("jaeger.sampling: service is required");
+  const res = await transport.get(samplingUrl, {
+    operation: `jaeger.sampling ${service}`,
+    query: { service },
+    ...(opts.signal === undefined ? {} : { signal: opts.signal }),
+  });
+  return parseSamplingStrategy(res.data);
+}
+
 /** Token-bucket rate limiter (Jaeger semantics: balance starts full, max(1, rate) credits). */
 export class RateLimiter {
   readonly creditsPerSecond: number;
@@ -208,12 +229,12 @@ export class JaegerRemoteSampler implements Sampler {
    * in use).
    */
   async refresh(opts: { signal?: AbortSignal } = {}): Promise<JaegerSamplingStrategy> {
-    const res = await this.#transport.get(this.samplingUrl, {
-      operation: `jaeger.sampling ${this.serviceName}`,
-      query: { service: this.serviceName },
-      ...(opts.signal === undefined ? {} : { signal: opts.signal }),
-    });
-    const strategy = parseSamplingStrategy(res.data);
+    const strategy = await fetchSamplingStrategy(
+      this.#transport,
+      this.samplingUrl,
+      this.serviceName,
+      opts,
+    );
     this.#install(strategy);
     return strategy;
   }

@@ -12,7 +12,12 @@ import {
 } from "./core/index.js";
 import { JaegerConfig, type JaegerConfigOptions } from "./config.js";
 import { JaegerQueryClient, createJaegerTransport } from "./query.js";
-import { JaegerRemoteSampler, type JaegerRemoteSamplerOptions } from "./sampler.js";
+import {
+  JaegerRemoteSampler,
+  type JaegerRemoteSamplerOptions,
+  type JaegerSamplingStrategy,
+  fetchSamplingStrategy,
+} from "./sampler.js";
 import {
   initTracing,
   type JaegerInitTracingOptions,
@@ -53,6 +58,7 @@ export class JaegerClient {
   /** The immutable configuration. */
   readonly config: JaegerConfig;
   readonly #transport: HttpTransport;
+  readonly #healthTransport: HttpTransport;
   readonly #internals: ClientInternals;
   readonly #handles = new Set<JaegerTracingHandle>();
   readonly #samplers = new Set<JaegerRemoteSampler>();
@@ -65,6 +71,8 @@ export class JaegerClient {
     this.config = cfg;
     this.#internals = internals;
     this.#transport = createJaegerTransport(cfg, internals);
+    this.#healthTransport =
+      cfg.token === undefined ? this.#transport : createJaegerTransport(cfg, internals, false);
   }
 
   /** Builds a client from `GROW_JAEGER_*` (and vendor) environment variables. */
@@ -84,17 +92,21 @@ export class JaegerClient {
   }
 
   /**
-   * Liveness of the query service: `GET /` on the query port (the stack catalog health target).
-   * With `healthUrl` set, the healthcheckv2 `/status` answer is added (`healthy=false` when it
+   * Liveness of the query service: `GET /` on the query port (the stack catalog health target),
+   * without the token. With `healthUrl` set, the healthcheckv2 `/status` answer is added (`healthy=false` when it
    * reports unhealthy). Never throws for an unhealthy or unreachable service (only `CANCELLED`
    * and `CONFIG`).
    */
   health(options: CallOptions = {}): Promise<HealthStatus> {
     return probeHealth(async () => {
-      await this.#transport.get("/", { operation: "health", responseType: "none", ...options });
+      await this.#healthTransport.get("/", {
+        operation: "health",
+        responseType: "none",
+        ...options,
+      });
       const healthUrl = this.config.healthUrl;
       if (healthUrl === undefined) return healthStatus("ok");
-      const res = await this.#transport.get<Record<string, unknown> | undefined>(healthUrl, {
+      const res = await this.#healthTransport.get<Record<string, unknown> | undefined>(healthUrl, {
         operation: "health",
         ...options,
       });
@@ -133,7 +145,7 @@ export class JaegerClient {
       allowStatus: [404],
       ...options,
     });
-    const match = VERSION_RE.exec(res.data ?? "");
+    const match = res.status === 404 ? null : VERSION_RE.exec(res.data ?? "");
     if (match === null) return null;
     try {
       const parsed = JSON.parse(match[1] as string) as Record<string, unknown>;
@@ -151,7 +163,8 @@ export class JaegerClient {
   /**
    * Server version without the leading `v` (e.g. `2.23.0`): parsed from `JAEGER_VERSION` in the
    * UI page, else from `target_info{service_version=…}` at `metricsUrl`. Throws
-   * `UnsupportedError` when neither source reports one.
+   * `UnsupportedError` when neither source reports one (a 404 from either source is not
+   * `NotFoundError`).
    */
   async serverVersion(options: CallOptions = {}): Promise<string> {
     const info = await this.buildInfo(options);
@@ -161,24 +174,35 @@ export class JaegerClient {
       const res = await this.#transport.get<string | undefined>(metricsUrl, {
         operation: "serverVersion",
         responseType: "text",
+        allowStatus: [404],
         ...options,
       });
-      const match = TARGET_INFO_RE.exec(res.data ?? "");
+      const match = res.status === 404 ? null : TARGET_INFO_RE.exec(res.data ?? "");
       if (match !== null) return stripV(match[1] as string);
     }
     throw new UnsupportedError("serverVersion: the service does not report a version");
   }
 
   /**
-   * Starts OpenTelemetry tracing to Jaeger (see the package-level `initTracing`). The handle is
-   * shut down by {@link close}.
+   * Fetches the remote sampling strategy of a service once (`GET {samplingUrl}?service=`), with
+   * this client's settings and token. A blank service throws `ValidationError` without a
+   * request.
+   */
+  samplingStrategy(service: string, options: CallOptions = {}): Promise<JaegerSamplingStrategy> {
+    return fetchSamplingStrategy(this.#transport, this.config.samplingUrl, service, options);
+  }
+
+  /**
+   * Starts OpenTelemetry tracing to Jaeger (see the package-level `initTracing`); a remote
+   * sampler it creates uses this client's configuration (`samplingUrl`, token, TLS). The handle
+   * is shut down by {@link close}.
    */
   initTracing(
     config: JaegerTracingConfig,
-    options?: JaegerInitTracingOptions,
+    options: JaegerInitTracingOptions = {},
   ): JaegerTracingHandle {
     this.#assertOpen("initTracing");
-    const handle = initTracing(config, options);
+    const handle = initTracing(config, { samplerConfig: this.config, ...options });
     this.#handles.add(handle);
     return handle;
   }
@@ -217,6 +241,7 @@ export class JaegerClient {
     this.#handles.clear();
     this.#samplers.clear();
     await Promise.allSettled([...handles, ...samplers]);
+    if (this.#healthTransport !== this.#transport) await this.#healthTransport.close();
     await this.#transport.close();
   }
 }

@@ -231,7 +231,7 @@ func WithSamplerHTTPConfig(cfg CommonConfig) RemoteSamplerOption {
 // it polls GET <samplingUrl>?service=<service> every poll interval and applies the
 // strategy. Operations listed in the per-operation strategies are sampled with their
 // own probability; every other operation uses the service-level rate limiter
-// (RATE_LIMITING) or probability (PROBABILISTIC). A failed or invalid poll keeps the
+// (whenever rateLimitingSampling is present) or probability. A failed or invalid poll keeps the
 // last good strategy. Use it with InitTracing(…, WithSampler(s)) or
 // sdktrace.WithSampler. Close stops polling.
 type RemoteSampler struct {
@@ -242,6 +242,7 @@ type RemoteSampler struct {
 	interval time.Duration
 	onError  func(error)
 	now      func() time.Time
+	initial  float64
 
 	state atomic.Pointer[samplerState]
 
@@ -301,7 +302,7 @@ func newRemoteSampler(e *endpoint, header http.Header, owns bool, service string
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &RemoteSampler{
 		e: e, header: header, owns: owns, service: service, interval: pollInterval,
-		onError: o.onError, now: o.now, ctx: ctx, cancel: cancel, done: make(chan struct{}),
+		onError: o.onError, now: o.now, initial: o.initialRate, ctx: ctx, cancel: cancel, done: make(chan struct{}),
 	}
 	s.state.Store(&samplerState{
 		strategy: SamplingStrategy{StrategyType: StrategyProbabilistic, SamplingRate: o.initialRate, Operations: []OperationStrategy{}},
@@ -338,9 +339,10 @@ func (s *RemoteSampler) Refresh(ctx context.Context) error {
 	return nil
 }
 
-// apply builds the samplers of a strategy (decision: per-operation strategies win for
-// listed operations; the service-level rate limiter or probability applies to all
-// other operations).
+// apply builds the samplers of a strategy (decisions 4 and 7a: per-operation
+// strategies win for listed operations; every other operation uses the rate limiter
+// whenever rateLimitingSampling is present, else probabilisticSampling, else
+// operationSampling.defaultSamplingProbability, else the initial rate).
 func (s *RemoteSampler) apply(strategy SamplingStrategy) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -349,14 +351,16 @@ func (s *RemoteSampler) apply(strategy SamplingStrategy) {
 	for _, o := range strategy.Operations {
 		next.ops[o.Operation] = sdktrace.TraceIDRatioBased(o.SamplingRate)
 	}
-	if strategy.StrategyType == StrategyRateLimiting && (strategy.hasRateLimiting || !strategy.hasProbabilistic) {
+	if strategy.hasRateLimiting {
 		if old, ok := prev.fallback.(*rateLimitingSampler); ok && old.rate == strategy.MaxTracesPerSecond {
 			next.fallback = old
 		} else {
 			next.fallback = newRateLimitingSampler(strategy.MaxTracesPerSecond, s.now)
 		}
-	} else {
+	} else if strategy.hasProbabilistic || strategy.hasOperations {
 		next.fallback = sdktrace.TraceIDRatioBased(strategy.SamplingRate)
+	} else {
+		next.fallback = sdktrace.TraceIDRatioBased(s.initial)
 	}
 	s.state.Store(next)
 }
@@ -395,7 +399,8 @@ func (s *RemoteSampler) Close() error {
 }
 
 // rateLimitingSampler samples at most rate traces per second (token bucket with a
-// burst of max(rate, 1)).
+// burst of max(rate, 1), starting full: a rate of 0 lets the first trace through and
+// then none, as in Jaeger).
 type rateLimitingSampler struct {
 	mu      sync.Mutex
 	rate    float64
@@ -418,7 +423,7 @@ func (r *rateLimitingSampler) allow() bool {
 		r.balance = math.Min(r.burst, r.balance+elapsed*r.rate)
 	}
 	r.last = now
-	if r.rate > 0 && r.balance >= 1 {
+	if r.balance >= 1 {
 		r.balance--
 		return true
 	}

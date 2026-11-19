@@ -46,7 +46,7 @@ type GetTraceOptions struct {
 	RawTraces bool
 }
 
-// Operation is one operation of a service as listed by ListOperationsWith.
+// Operation is one operation of a service as listed by GetOperations.
 type Operation struct {
 	// Name is the span name.
 	Name string `json:"name"`
@@ -54,7 +54,7 @@ type Operation struct {
 	SpanKind SpanKind `json:"spanKind"`
 }
 
-// ListOperationsOptions narrow QueryClient.ListOperationsWith.
+// ListOperationsOptions narrow QueryClient.ListOperationsWith and GetOperations.
 type ListOperationsOptions struct {
 	// SpanKind keeps only operations of this kind (server, client, producer, consumer,
 	// internal; "" = all). The SDK sends it lower-case (Jaeger is case-sensitive).
@@ -124,6 +124,18 @@ func routeMissing(op, route string) error {
 // is missing.
 func (q *QueryClient) GetTrace(ctx context.Context, traceID string) (*Trace, error) {
 	return q.GetTraceWith(ctx, traceID, GetTraceOptions{})
+}
+
+// RequireTrace is GetTrace but returns a NOT_FOUND error when the trace does not exist.
+func (q *QueryClient) RequireTrace(ctx context.Context, traceID string) (*Trace, error) {
+	t, err := q.GetTrace(ctx, traceID)
+	if err != nil {
+		return nil, err
+	}
+	if t == nil {
+		return nil, NotFoundError("traces.getTrace "+traceID, "trace not found")
+	}
+	return t, nil
 }
 
 // GetTraceWith is GetTrace with a time hint and the raw-traces switch.
@@ -337,7 +349,13 @@ func (q *QueryClient) ListServices(ctx context.Context) ([]string, error) {
 // span kinds and sorted. An empty service is a VALIDATION error; an unknown service
 // returns an empty slice.
 func (q *QueryClient) ListOperations(ctx context.Context, service string) ([]string, error) {
-	ops, err := q.ListOperationsWith(ctx, service, ListOperationsOptions{})
+	return q.ListOperationsWith(ctx, service, ListOperationsOptions{})
+}
+
+// ListOperationsWith is ListOperations with options: only the names of operations of
+// opts.SpanKind (sent lower-case) when it is set.
+func (q *QueryClient) ListOperationsWith(ctx context.Context, service string, opts ListOperationsOptions) ([]string, error) {
+	ops, err := q.GetOperations(ctx, service, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -353,9 +371,9 @@ func (q *QueryClient) ListOperations(ctx context.Context, service string) ([]str
 	return out, nil
 }
 
-// ListOperationsWith returns the operations of service with their span kinds (GET
+// GetOperations returns the operations of service with their span kinds (GET
 // /api/v3/operations), optionally filtered by span kind, sorted by name then kind.
-func (q *QueryClient) ListOperationsWith(ctx context.Context, service string, opts ListOperationsOptions) ([]Operation, error) {
+func (q *QueryClient) GetOperations(ctx context.Context, service string, opts ListOperationsOptions) ([]Operation, error) {
 	const op = "traces.listOperations"
 	if strings.TrimSpace(service) == "" {
 		return nil, ValidationError(op, "service is required")

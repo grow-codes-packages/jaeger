@@ -9,8 +9,9 @@ use opentelemetry::trace::{Span as _, TraceContextExt, Tracer as _};
 use sdk::core::{EnvReader, ErrorCode, TlsConfig};
 use sdk::tracing::{Compression, PropagatorKind, Protocol, SamplerKind, TracingConfig};
 use sdk::{
-    init_tracing_with_options, jaeger_exporter, tracing_config_from_env, JaegerRemoteSampler,
-    JaegerTracingOptions, RemoteSamplerOptions, RemoteSampling, SamplingPreset,
+    init_tracing_with_options, jaeger_exporter, tracing_config_from_env, JaegerConfig,
+    JaegerRemoteSampler, JaegerTracingOptions, RemoteSamplerOptions, RemoteSampling,
+    SamplingPreset,
 };
 use support::respond;
 use wiremock::matchers::{header, method, path};
@@ -481,6 +482,35 @@ async fn jaeger_remote_from_env() {
         .contains("/sampling"));
     h.shutdown().await.unwrap();
 
+    // WithSamplerConfig equivalent: the token and URL come from sampler_config.
+    let e = env(&[("OTEL_TRACES_SAMPLER", "jaeger_remote")]);
+    let h = init_tracing_with_options(
+        TracingConfig::new("sdk-env-remote")
+            .with_endpoint(server.uri())
+            .with_set_global(false),
+        JaegerTracingOptions {
+            env: Some(e),
+            sampler_config: Some(
+                JaegerConfig::builder()
+                    .sampling_url(sampling.clone())
+                    .token("s3cret-token")
+                    .build()
+                    .unwrap(),
+            ),
+            ..JaegerTracingOptions::default()
+        },
+    )
+    .unwrap();
+    let s = h.remote_sampler().unwrap().clone();
+    s.ready().await.unwrap();
+    assert_eq!(s.strategy().unwrap().sampling_rate, 0.25);
+    let reqs = server.received_requests().await.unwrap();
+    assert!(reqs.iter().any(|r| r
+        .headers
+        .get("authorization")
+        .is_some_and(|v| v == "Bearer s3cret-token")));
+    h.shutdown().await.unwrap();
+
     for bad in [
         "pollingIntervalMs=x",
         "initialSamplingRate=2",
@@ -508,4 +538,16 @@ fn init_outside_runtime_fails() {
     let err = init_tracing_with_options(TracingConfig::new("x").with_set_global(false), no_env())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::Config);
+}
+
+#[test]
+fn service_name_falls_back_to_resource_attributes() {
+    let c = tracing_config_from_env(
+        TracingConfig::new(""),
+        &env(&[("OTEL_RESOURCE_ATTRIBUTES", "service.name=from-res,team=env")]),
+    )
+    .unwrap();
+    assert_eq!(c.service_name, "from-res");
+    assert!(!c.resource_attributes.contains_key("service.name"));
+    assert!(c.resource_attributes.contains_key("team"));
 }

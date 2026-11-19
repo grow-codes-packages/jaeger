@@ -221,6 +221,8 @@ async fn server_version_sources() {
         .mount(&ui)
         .await;
     assert_eq!(client(&ui).server_version().await.unwrap(), "2.23.0");
+    let info = client(&ui).build_info().await.unwrap().unwrap();
+    assert_eq!(info.git_version.as_deref(), Some("v2.23.0"));
 
     // UI without a version (404 is not NOT_FOUND) → metrics fallback
     let metrics = MockServer::start().await;
@@ -251,6 +253,7 @@ async fn server_version_sources() {
         "2.23.0"
     );
     // neither source → UNSUPPORTED
+    assert_eq!(client(&metrics).build_info().await.unwrap(), None);
     let err = client(&metrics).server_version().await.unwrap_err();
     assert_eq!(err.code(), ErrorCode::Unsupported);
     let empty = MockServer::start().await;
@@ -414,4 +417,52 @@ async fn close_idempotent() {
     assert_eq!(closed.load(Ordering::SeqCst), 1);
     assert_eq!(c.ping().await.unwrap_err().code(), ErrorCode::Cancelled);
     assert!(c.transport().is_closed());
+}
+
+#[tokio::test]
+async fn init_tracing_uses_client_config_and_close_shuts_down() {
+    let server = MockServer::start().await;
+    Mock::given(path("/sampling"))
+        .respond_with(respond("sampling.probabilistic"))
+        .mount(&server)
+        .await;
+    let c = Client::new(
+        Config::builder()
+            .url(server.uri())
+            .sampling_url(format!("{}/sampling", server.uri()))
+            .token("t0ken-1234")
+            .retry(fast_retry())
+            .build()
+            .unwrap(),
+    )
+    .unwrap();
+    let env = EnvReader::from_map([("OTEL_TRACES_SAMPLER", "jaeger_remote")]);
+    let h = c
+        .init_tracing(
+            sdk::tracing::TracingConfig::new("svc-client")
+                .with_endpoint(server.uri())
+                .with_set_global(false),
+            sdk::JaegerTracingOptions {
+                env: Some(env),
+                ..sdk::JaegerTracingOptions::default()
+            },
+        )
+        .unwrap();
+    let sampler = h.remote_sampler().unwrap().clone();
+    sampler.ready().await.unwrap();
+    assert_eq!(sampler.strategy().unwrap().sampling_rate, 0.25);
+    let reqs = server.received_requests().await.unwrap();
+    assert!(reqs.iter().any(|r| r
+        .headers
+        .get("authorization")
+        .is_some_and(|v| v == "Bearer t0ken-1234")));
+    c.close().await;
+    assert!(h.is_shutdown());
+    let err = c
+        .init_tracing(
+            sdk::tracing::TracingConfig::new("x"),
+            sdk::JaegerTracingOptions::default(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::Cancelled);
 }

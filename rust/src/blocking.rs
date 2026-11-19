@@ -11,8 +11,8 @@ use crate::tracing::{
     DependencyLink, DependencyOptions, Trace, TraceSearchQuery, TraceSummary, WaitForTraceOptions,
 };
 use crate::{
-    GetTraceOptions, JaegerClient as AsyncClient, JaegerConfig, ListOperationsOptions, Operation,
-    SamplingStrategy,
+    GetTraceOptions, JaegerBuildInfo, JaegerClient as AsyncClient, JaegerConfig,
+    ListOperationsOptions, Operation, SamplingStrategy,
 };
 
 /// Blocking client for Jaeger with the same methods as the async client.
@@ -66,6 +66,11 @@ impl JaegerClient {
         self.block_on(self.inner.server_version())
     }
 
+    /// See [`AsyncClient::build_info`].
+    pub fn build_info(&self) -> Result<Option<JaegerBuildInfo>> {
+        self.block_on(self.inner.build_info())
+    }
+
     /// See [`AsyncClient::sampling_strategy`].
     pub fn sampling_strategy(&self, service: &str) -> Result<SamplingStrategy> {
         self.block_on(self.inner.sampling_strategy(service))
@@ -79,6 +84,11 @@ impl JaegerClient {
     /// See [`JaegerQueryClient::get_trace_with`](crate::JaegerQueryClient::get_trace_with).
     pub fn get_trace_with(&self, trace_id: &str, opts: GetTraceOptions) -> Result<Option<Trace>> {
         self.block_on(self.inner.query().get_trace_with(trace_id, opts))
+    }
+
+    /// See [`JaegerQueryClient::require_trace`](crate::JaegerQueryClient::require_trace).
+    pub fn require_trace(&self, trace_id: &str) -> Result<Trace> {
+        self.block_on(self.inner.query().require_trace(trace_id))
     }
 
     /// See [`JaegerQueryClient::find_traces`](crate::JaegerQueryClient::find_traces).

@@ -87,6 +87,8 @@ fn blocking_client() {
     assert!(c.health().unwrap().healthy);
     c.ping().unwrap();
     assert_eq!(c.server_version().unwrap(), "2.23.0");
+    assert!(c.build_info().unwrap().is_some());
+    assert_eq!(c.require_trace(TID).unwrap().spans.len(), 1);
     assert_eq!(c.sampling_strategy("svc").unwrap().sampling_rate, 1.0);
     assert_eq!(c.get_trace(TID).unwrap().unwrap().spans.len(), 1);
     assert!(c

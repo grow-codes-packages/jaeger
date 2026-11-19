@@ -80,7 +80,7 @@ def test_health_probes_the_query_root() -> None:
     router = Router().add("/", HTML)
     with client(router, token=TOKEN) as c:
         assert c.health() == sdk.HealthStatus(True, "ok", {})
-    assert router.seen[0].headers["authorization"] == f"Bearer {TOKEN}"
+    assert "authorization" not in router.seen[0].headers  # health() is unauthenticated
 
 
 def test_health_with_healthcheck_detail() -> None:
@@ -189,8 +189,15 @@ def test_server_version_unsupported() -> None:
     with pytest.raises(sdk.UnsupportedError):
         client(router, **EXTRA).server_version()
     router2 = Router().add("/", httpx.Response(200, text="x")).add("/metrics", httpx.Response(500))
-    with pytest.raises(sdk.UnsupportedError):
+    with pytest.raises(sdk.UnavailableError):  # only a 404 means "no version"
         client(router2, retry=sdk.RetryPolicy(max_retries=0), **EXTRA).server_version()
+    router3 = (
+        Router()
+        .add("/", httpx.Response(404, text="404 page not found"))
+        .add("/metrics", httpx.Response(404, text='target_info{service_version="v9"} 1'))
+    )
+    with pytest.raises(sdk.UnsupportedError):
+        client(router3, **EXTRA).server_version()
 
 
 def test_server_version_root_error_propagates() -> None:
@@ -226,7 +233,7 @@ def test_sampling_strategy() -> None:
     assert router.params("/sampling") == {"service": "sdk-sampling-ops"}
     with pytest.raises(sdk.ValidationError):
         c.sampling_strategy("x")
-    with pytest.raises(sdk.ConfigError):
+    with pytest.raises(sdk.ValidationError):
         c.sampling_strategy("")
 
 

@@ -235,6 +235,15 @@ describe("findTraces / searchTraces", () => {
     expect(await q.searchTraces({ service: "none" })).toEqual([]);
     expect(await q.searchTraces()).toHaveLength(2);
   });
+
+  it("searchTraces maps the JSON 404 envelope to [] and a missing route to UnsupportedError", async () => {
+    const { q } = await setup({ "/api/v3/trace-summaries": "findTraces.no_match" });
+    expect(await q.searchTraces({ service: "none" })).toEqual([]);
+    const { q: bare } = await setup({});
+    await expect(bare.searchTraces({ service: "x" })).rejects.toMatchObject({
+      code: "UNSUPPORTED",
+    });
+  });
 });
 
 describe("services, operations, dependencies", () => {

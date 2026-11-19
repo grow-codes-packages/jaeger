@@ -116,16 +116,22 @@ export function isRouteMissing(err: unknown): boolean {
   );
 }
 
-/** Builds the HTTP transport for a Jaeger config (bearer token, `traceresponse` request id). */
+/**
+ * Builds the HTTP transport for a Jaeger config (bearer token, `traceresponse` request id).
+ * With `auth: false` the token is never sent (used by `health()`, which is unauthenticated).
+ */
 export function createJaegerTransport(
   config: JaegerConfig,
   internals: QueryInternals = {},
+  auth = true,
 ): HttpTransport {
   return new HttpTransport({
     ...internals,
     config,
     defaultHeaders: (): Record<string, string> =>
-      config.token === undefined ? {} : { authorization: `Bearer ${config.token.reveal()}` },
+      !auth || config.token === undefined
+        ? {}
+        : { authorization: `Bearer ${config.token.reveal()}` },
     knownSecrets: () => config.knownSecrets(),
     requestIdHeaders: [...DEFAULT_REQUEST_ID_HEADERS, "traceresponse"],
   });
@@ -317,7 +323,8 @@ export class JaegerQueryClient extends BaseTraceQueryClient {
 
   /**
    * Searches trace summaries: `GET /api/v3/trace-summaries` (same filter as {@link findTraces}).
-   * Returns one {@link TraceSummary} per matching trace.
+   * Returns one {@link TraceSummary} per matching trace; Jaeger's JSON 404 envelope ("no
+   * traces found") returns `[]`.
    */
   async searchTraces(
     query: JaegerTraceQuery = {},
@@ -325,13 +332,18 @@ export class JaegerQueryClient extends BaseTraceQueryClient {
   ): Promise<TraceSummary[]> {
     const operation = "jaeger.searchTraces";
     const params = this.#searchParams(query, operation);
-    const data = await this.#get<unknown>(
-      "/api/v3/trace-summaries",
-      operation,
-      params,
-      opts.signal,
-    );
-    return summariesFromBody(data);
+    try {
+      const data = await this.#get<unknown>(
+        "/api/v3/trace-summaries",
+        operation,
+        params,
+        opts.signal,
+      );
+      return summariesFromBody(data);
+    } catch (err) {
+      if (err instanceof NotFoundError) return [];
+      throw err;
+    }
   }
 
   /** Service names that reported spans: `GET /api/v3/services` (sorted). */

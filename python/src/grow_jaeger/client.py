@@ -31,6 +31,7 @@ from ._core import (
     TimeoutError,
     UnavailableError,
     UnsupportedError,
+    ValidationError,
 )
 from ._tracing import TracingConfig
 from .config import JaegerConfig
@@ -77,9 +78,12 @@ def _parse_build_info(resp: Response) -> JaegerBuildInfo | None:
     }
 
 
-def _version_from_metrics(resp: Response) -> str | None:
-    if not resp.ok:
+def _version_from_metrics(resp: Response, config: JaegerConfig) -> str | None:
+    """The version in ``target_info``; ``None`` on a 404 or without the series."""
+    if resp.status == 404:
         return None
+    if not resp.ok:
+        raise _http.status_error(resp, "jaeger.server_version", config)
     match = _TARGET_INFO_RE.search(resp.text)
     return _strip_v(match.group(1)) if match else None
 
@@ -127,7 +131,7 @@ def _health_from_error(err: ServiceError) -> HealthStatus:
 
 
 def _health_req(path: str, config: JaegerConfig) -> Request:
-    return _http.get(path, "jaeger.health", config, max_retries=0)
+    return _http.get(path, "jaeger.health", config, auth=False, max_retries=0)
 
 
 def _ping_req(config: JaegerConfig) -> Request:
@@ -136,7 +140,7 @@ def _ping_req(config: JaegerConfig) -> Request:
 
 def _sampling_req(path: str, service: str, config: JaegerConfig) -> Request:
     if not isinstance(service, str) or not service.strip():
-        raise ConfigError("jaeger.sampling_strategy: service is required")
+        raise ValidationError("jaeger.sampling: service is required")
     return _http.get(path, f"jaeger.sampling {service}", config, params={"service": service})
 
 
@@ -242,7 +246,7 @@ class JaegerClient:
             resp = transport.request(
                 _http.get(path, "jaeger.server_version", self.config), cancel=cancel
             )
-            version = _version_from_metrics(resp)
+            version = _version_from_metrics(resp, self.config)
             if version:
                 return version
         raise _unsupported_version()
@@ -262,6 +266,7 @@ class JaegerClient:
         handle is shut down by :meth:`close`."""
         if self._resources.closed:
             raise ConfigError("jaeger.init_tracing: client is closed")
+        kwargs.setdefault("sampler_config", self.config)
         handle = init_tracing(config, **kwargs)
         self._resources.register(handle)
         return handle
@@ -389,7 +394,7 @@ class AsyncJaegerClient:
         if self.config.metrics_url is not None:
             transport, path = self._pool.for_url(self.config.metrics_url)
             resp = await transport.request(_http.get(path, "jaeger.server_version", self.config))
-            version = _version_from_metrics(resp)
+            version = _version_from_metrics(resp, self.config)
             if version:
                 return version
         raise _unsupported_version()
@@ -406,6 +411,7 @@ class AsyncJaegerClient:
         """See :meth:`JaegerClient.init_tracing`."""
         if self._resources.closed:
             raise ConfigError("jaeger.init_tracing: client is closed")
+        kwargs.setdefault("sampler_config", self.config)
         handle = init_tracing(config, **kwargs)
         self._resources.register(handle)
         return handle

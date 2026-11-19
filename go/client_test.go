@@ -3,6 +3,7 @@ package jaeger
 import (
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"net/http"
 	"strings"
 	"testing"
@@ -154,6 +155,9 @@ func TestClient(t *testing.T) {
 		if v, err := c.ServerVersion(t.Context()); err != nil || v != "2.23.0" {
 			t.Fatalf("version %q %v", v, err)
 		}
+		if info, err := c.BuildInfo(t.Context()); err != nil || info == nil || info.GitVersion != "v2.23.0" {
+			t.Fatalf("build info %+v %v", info, err)
+		}
 		if c.Config().URL != ts.URL || c.Query() == nil {
 			t.Fatal("Config()/Query()")
 		}
@@ -233,7 +237,22 @@ func TestClient(t *testing.T) {
 		if _, err := newTestClient(t, ts404.URL, nil).ServerVersion(t.Context()); !errors.Is(err, ErrUnsupported) {
 			t.Fatalf("root 404: %v", err)
 		}
+		if info, err := newTestClient(t, ts404.URL, nil).BuildInfo(t.Context()); err != nil || info != nil {
+			t.Fatalf("build info 404: %+v %v", info, err)
+		}
+		if info, err := newTestClient(t, noVersion.URL, nil).BuildInfo(t.Context()); err != nil || info != nil {
+			t.Fatalf("build info without version: %+v %v", info, err)
+		}
 		ts500 := newTestServer(t, status(http.StatusInternalServerError))
+		if _, err := newTestClient(t, ts500.URL, func(cfg *Config) { cfg.Retry = fastRetry(0) }).BuildInfo(t.Context()); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("build info 500: %v", err)
+		}
+		broken := newTestServer(t, func(w http.ResponseWriter, _ *http.Request, _ int) {
+			_, _ = w.Write([]byte(`JAEGER_VERSION = {broken};`))
+		})
+		if info, err := newTestClient(t, broken.URL, nil).BuildInfo(t.Context()); err != nil || info != nil {
+			t.Fatalf("broken build info: %+v %v", info, err)
+		}
 		c = newTestClient(t, ts500.URL, func(cfg *Config) { cfg.Retry = fastRetry(0) })
 		if _, err := c.ServerVersion(t.Context()); !errors.Is(err, ErrUnavailable) {
 			t.Fatalf("version 500: %v", err)
@@ -331,5 +350,34 @@ func TestClientSampling(t *testing.T) {
 	case <-rs.done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("client close must stop its samplers")
+	}
+}
+
+func TestClientInitTracing(t *testing.T) {
+	srv := newSamplingServer(t)
+	c := newTestClient(t, srv.URL, func(cfg *Config) { cfg.SamplingURL = srv.URL + "/sampling"; cfg.Token = NewSecret("client-token") })
+	h, err := c.InitTracing(t.Context(), TracingConfig{ServiceName: "svc-client", DisableSetGlobal: true},
+		WithEnv(map[string]string{"OTEL_TRACES_SAMPLER": "jaeger_remote"}),
+		WithExporterFactory(memoryFactory(tracetest.NewInMemoryExporter(), nil)))
+	if err != nil || h.RemoteSampler() == nil {
+		t.Fatalf("init: %v", err)
+	}
+	if err := h.RemoteSampler().Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := srv.request(int(srv.calls.Load()) - 1).Header.Get("Authorization"); got != "Bearer client-token" {
+		t.Fatalf("client token not used by the remote sampler: %q", got)
+	}
+	if _, err := c.InitTracing(t.Context(), TracingConfig{}, WithEnv(map[string]string{})); !errors.Is(err, ErrConfig) {
+		t.Fatalf("invalid config: %v", err)
+	}
+	_ = c.Close()
+	select {
+	case <-h.RemoteSampler().done:
+	default:
+		t.Fatal("Close must shut the handle down")
+	}
+	if _, err := c.InitTracing(t.Context(), TracingConfig{ServiceName: "s"}); !errors.Is(err, ErrCancelled) {
+		t.Fatalf("closed client: %v", err)
 	}
 }

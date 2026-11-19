@@ -19,6 +19,7 @@ use opentelemetry_sdk::runtime::Tokio;
 use opentelemetry_sdk::trace::span_processor_with_async_runtime::BatchSpanProcessor;
 use opentelemetry_sdk::trace::{BatchConfigBuilder, Sampler, SdkTracer, SdkTracerProvider};
 
+use crate::config::JaegerConfig;
 use crate::core::{EnvReader, Error, Result, TlsConfig};
 use crate::sampler::{JaegerRemoteSampler, RemoteSamplerOptions};
 use crate::tracing::{
@@ -309,16 +310,24 @@ fn resolve(config: TracingConfig, env: &EnvReader) -> Result<(TracingConfig, Opt
             });
         }
     }
-    if c.service_name.trim().is_empty() {
-        if let Some(name) = env.string("SERVICE_NAME", &["OTEL_SERVICE_NAME"]) {
-            c.service_name = name;
-        }
-    }
+    let mut resource_service_name = None;
     if let Some((variable, v)) = otel(env, &["OTEL_RESOURCE_ATTRIBUTES"]) {
         for (k, val) in parse_key_values(&v, &variable)? {
+            if k == "service.name" {
+                resource_service_name = Some(val);
+                continue;
+            }
             c.resource_attributes
                 .entry(k)
                 .or_insert(AttrValue::String(val));
+        }
+    }
+    if c.service_name.trim().is_empty() {
+        if let Some(name) = env
+            .string("SERVICE_NAME", &["OTEL_SERVICE_NAME"])
+            .or(resource_service_name)
+        {
+            c.service_name = name;
         }
     }
     let mut remote = None;
@@ -522,6 +531,10 @@ pub struct JaegerTracingOptions {
     pub remote_sampling: Option<RemoteSampling>,
     /// Wrap the remote sampler in a parent-based sampler (default `true`).
     pub parent_based: bool,
+    /// Settings (sampling URL, token, TLS, timeouts) of a remote sampler started for
+    /// `OTEL_TRACES_SAMPLER=jaeger_remote`. Default: [`JaegerConfig`] from the same environment
+    /// (`GROW_JAEGER_SAMPLING_URL`, `JAEGER_SAMPLING_ENDPOINT`, `GROW_JAEGER_TOKEN`, …).
+    pub sampler_config: Option<JaegerConfig>,
 }
 
 impl Default for JaegerTracingOptions {
@@ -531,6 +544,7 @@ impl Default for JaegerTracingOptions {
             ignore_env: false,
             remote_sampling: None,
             parent_based: true,
+            sampler_config: None,
         }
     }
 }
@@ -584,11 +598,20 @@ pub fn init_tracing_with_options(
         }
         (None, Some(r)) => {
             parent_based = r.parent_based;
-            let url = r
-                .endpoint
-                .or_else(|| env.string("SAMPLING_URL", &["JAEGER_SAMPLING_ENDPOINT"]));
-            let mut o = RemoteSamplerOptions::new(config.service_name.clone());
-            o.sampling_url = url;
+            // Sampling settings (URL, token, TLS, timeouts) from the same environment.
+            let sampling = match options.sampler_config {
+                Some(c) => c,
+                None => JaegerConfig::builder().build_with_env(&env)?,
+            };
+            let mut o = RemoteSamplerOptions::new(config.service_name.clone())
+                .http_config(sampling.common().clone());
+            o.sampling_url = Some(
+                r.endpoint
+                    .unwrap_or_else(|| sampling.sampling_url().to_string()),
+            );
+            if let Some(token) = sampling.token() {
+                o = o.token(token.clone());
+            }
             if let Some(i) = r.poll_interval {
                 o.poll_interval = i;
             }

@@ -153,6 +153,7 @@ describe("JaegerClient", () => {
     });
     const client = new JaegerClient({ url: s.url, token: "t0ken-value", ...fast });
     expect(await client.health()).toEqual({ healthy: true, status: "ok", details: {} });
+    expect(s.requests[0]!.headers.authorization).toBeUndefined();
     expect(await client.ping()).toBeGreaterThanOrEqual(0);
     expect(s.requests[1]!.url).toBe("/api/v3/services");
     expect(s.requests[1]!.headers.authorization).toBe("Bearer t0ken-value");
@@ -297,6 +298,38 @@ describe("JaegerClient", () => {
     const empty = new JaegerClient({ url: emptyBody.url, ...fast });
     expect(await empty.buildInfo()).toBeNull();
     for (const c of [withMetrics, noVersion, bare, broken, odd, empty]) await c.close();
+  });
+
+  it("serverVersion: a 404 on / and on metricsUrl is UnsupportedError, other errors propagate", async () => {
+    const s = await server({
+      "/": { status: 404, body: "404 page not found" },
+      "/metrics": { status: 404, body: 'target_info{service_version="v9.9.9"} 1' },
+      "/metrics-down": { status: 400, body: "bad" },
+    });
+    const missing = new JaegerClient({ url: s.url, metricsUrl: `${s.url}/metrics`, ...fast });
+    await expect(missing.serverVersion()).rejects.toMatchObject({ code: "UNSUPPORTED" });
+    const down = new JaegerClient({ url: s.url, metricsUrl: `${s.url}/metrics-down`, ...fast });
+    await expect(down.serverVersion()).rejects.toMatchObject({ code: "VALIDATION" });
+    await missing.close();
+    await down.close();
+  });
+
+  it("samplingStrategy fetches the strategy once with the token; blank service is VALIDATION", async () => {
+    const s = await server({ "/sampling": "sampling.per_operation" });
+    const client = new JaegerClient({
+      url: s.url,
+      samplingUrl: `${s.url}/sampling`,
+      token: "t0ken-value",
+      ...fast,
+    });
+    const strategy = await client.samplingStrategy("checkout");
+    expect(strategy.type).toBe("probabilistic");
+    expect(strategy.operations.length).toBeGreaterThan(0);
+    expect(s.requests[0]!.url).toBe("/sampling?service=checkout");
+    expect(s.requests[0]!.headers.authorization).toBe("Bearer t0ken-value");
+    await expect(client.samplingStrategy(" ")).rejects.toMatchObject({ code: "VALIDATION" });
+    expect(s.requests).toHaveLength(1);
+    await client.close();
   });
 
   it("core.close.idempotent: close twice is safe", async () => {
