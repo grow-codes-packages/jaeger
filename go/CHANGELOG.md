@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/grow-codes-packages/jaeger/compare/go/v0.1.0...go/v0.1.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* sync jaeger to sdk-kit 0.3.0 (GRO-1378) ([#10](https://github.com/grow-codes-packages/jaeger/issues/10)) ([8f767bb](https://github.com/grow-codes-packages/jaeger/commit/8f767bbdaa1e252f2468eebdca24015199b54d67))
+
 ## 0.1.0 (2026-11-19)
 
 
