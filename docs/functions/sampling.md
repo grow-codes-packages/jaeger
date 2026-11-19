@@ -43,7 +43,7 @@ parent-based sampler (what `initTracing` does unless told otherwise).
         Duration::from_secs(60),
     )?;
     sampler.ready().await?;
-    let tracing = grow_jaeger::init_tracing_with_sampler(TracingConfig::new("checkout"), sampler.clone())?;
+    let tracing = grow_jaeger::init_tracing_with_remote_sampler(TracingConfig::new("checkout"), sampler.clone())?;
     ```
 
 === "Go"

@@ -462,9 +462,6 @@ pub fn jaeger_exporter(config: &TracingConfig) -> Result<SpanExporter> {
         }
         Protocol::Grpc => {
             use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
-            use opentelemetry_otlp::tonic_types::transport::{
-                Certificate, ClientTlsConfig, Identity,
-            };
             if tls.insecure_skip_verify {
                 return Err(Error::config(
                     "tracing: insecureSkipVerify is not supported with OTLP gRPC in Rust; use http/protobuf",
@@ -490,24 +487,52 @@ pub fn jaeger_exporter(config: &TracingConfig) -> Result<SpanExporter> {
             let ca = ca_pem(&tls)?;
             let identity = identity_pem(&tls)?;
             if endpoint.starts_with("https:") || ca.is_some() || identity.is_some() {
-                let mut t = ClientTlsConfig::new().with_native_roots();
-                if let Some(ca) = ca {
-                    t = t.ca_certificate(Certificate::from_pem(ca));
-                }
-                if let (Some(cert), Some(key)) = (&tls.client_cert_path, &tls.client_key_path) {
-                    t = t.identity(Identity::from_pem(read_pem(cert)?, read_pem(key)?));
-                }
-                if let Ok(u) = url::Url::parse(&endpoint) {
-                    if let Some(host) = u.host_str() {
-                        t = t.domain_name(host.to_owned());
-                    }
-                }
-                b = b.with_tls_config(t);
+                b = grpc_tls(b, &endpoint, &tls, ca)?;
             }
             b.build()
         }
     };
     built.map_err(|e| Error::config(format!("tracing: cannot build the OTLP exporter: {e}")))
+}
+
+type TonicBuilder =
+    opentelemetry_otlp::SpanExporterBuilder<opentelemetry_otlp::TonicExporterBuilderSet>;
+
+/// TLS for the gRPC exporter (crate feature `otlp-tls`, on by default).
+#[cfg(feature = "otlp-tls")]
+fn grpc_tls(
+    b: TonicBuilder,
+    endpoint: &str,
+    tls: &TlsConfig,
+    ca: Option<Vec<u8>>,
+) -> Result<TonicBuilder> {
+    use opentelemetry_otlp::tonic_types::transport::{Certificate, ClientTlsConfig, Identity};
+    let mut t = ClientTlsConfig::new().with_native_roots();
+    if let Some(ca) = ca {
+        t = t.ca_certificate(Certificate::from_pem(ca));
+    }
+    if let (Some(cert), Some(key)) = (&tls.client_cert_path, &tls.client_key_path) {
+        t = t.identity(Identity::from_pem(read_pem(cert)?, read_pem(key)?));
+    }
+    if let Ok(u) = url::Url::parse(endpoint) {
+        if let Some(host) = u.host_str() {
+            t = t.domain_name(host.to_owned());
+        }
+    }
+    Ok(b.with_tls_config(t))
+}
+
+/// Without the crate feature `otlp-tls` the gRPC exporter cannot use TLS: `CONFIG`.
+#[cfg(not(feature = "otlp-tls"))]
+fn grpc_tls(
+    _b: TonicBuilder,
+    _endpoint: &str,
+    _tls: &TlsConfig,
+    _ca: Option<Vec<u8>>,
+) -> Result<TonicBuilder> {
+    Err(Error::config(
+        "tracing: TLS settings for grpc need the crate feature \"otlp-tls\"; use http/protobuf",
+    ))
 }
 
 /// Remote sampling for [`JaegerTracingOptions`].
@@ -561,7 +586,7 @@ pub fn init_tracing(config: TracingConfig) -> Result<JaegerTracingHandle> {
 
 /// [`init_tracing`] with a [`JaegerRemoteSampler`] deciding sampling (parent-based; the sampler
 /// is not closed by the handle).
-pub fn init_tracing_with_sampler(
+pub fn init_tracing_with_remote_sampler(
     config: TracingConfig,
     sampler: JaegerRemoteSampler,
 ) -> Result<JaegerTracingHandle> {

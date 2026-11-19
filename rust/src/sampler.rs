@@ -466,7 +466,7 @@ impl Drop for SamplerInner {
 /// OpenTelemetry head sampler driven by Jaeger remote sampling: it polls
 /// `GET <sampling_url>?service=<service>` every poll interval and applies the strategy (see the
 /// module docs for the rule). Use it with
-/// [`init_tracing_with_sampler`](crate::init_tracing_with_sampler) (which wraps it in a
+/// [`init_tracing_with_remote_sampler`](crate::init_tracing_with_remote_sampler) (which wraps it in a
 /// parent-based sampler) or `SdkTracerProvider::builder().with_sampler(…)`. Cheap to clone
 /// (clones share the strategy and the poller). [`close`](Self::close) stops polling.
 #[derive(Clone)]

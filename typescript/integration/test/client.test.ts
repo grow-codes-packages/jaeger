@@ -74,13 +74,13 @@ test("serverVersion is 2.23.0 (UI page) and matches target_info from the metrics
   }
 });
 
-test("close is idempotent and later calls fail with CONFIG", async () => {
+test("close is idempotent and later calls fail with CANCELLED", async () => {
   const client = JaegerClient.fromEnv();
   await client.close();
   await client.close();
   await assert.rejects(client.ping(), (err: unknown) => {
     assert.ok(err instanceof JaegerError);
-    assert.equal(err.code, "CONFIG");
+    assert.equal(err.code, "CANCELLED");
     return true;
   });
 });

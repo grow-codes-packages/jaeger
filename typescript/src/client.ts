@@ -1,7 +1,7 @@
 // Service-owned: generated once by sdk-kit, then maintained in this repository.
 
 import {
-  ConfigError,
+  CancelledError,
   type HealthStatus,
   type HttpTransport,
   type TransportOptions,
@@ -225,7 +225,7 @@ export class JaegerClient {
 
   #assertOpen(operation: string): void {
     if (this.#closed) {
-      throw new ConfigError(`${operation}: client is closed`);
+      throw new CancelledError(`${operation}: client is closed`);
     }
   }
 

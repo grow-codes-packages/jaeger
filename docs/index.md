@@ -34,5 +34,5 @@ Start with [Install](install.md) and the [Quickstart](quickstart.md).
 
 !!! note "Independent project"
     This SDK is made by [Grow Codes](https://grow.codes). Jaeger is a trademark of
-    The Linux Foundation (Jaeger is a CNCF project). This project is not affiliated with or endorsed by The Linux Foundation (Jaeger is a CNCF project). See
+    its owner (The Linux Foundation (Jaeger is a CNCF project)); this project is not affiliated with or endorsed by it. See
     [License & disclaimer](license.md).

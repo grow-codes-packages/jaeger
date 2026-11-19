@@ -8,6 +8,7 @@ import { OTLPTraceExporter as GrpcExporter } from "@opentelemetry/exporter-trace
 import { OTLPTraceExporter as HttpExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
+  CancelledError,
   ConfigError,
   JAEGER_OTLP_GRPC_ENDPOINT,
   JAEGER_OTLP_HTTP_ENDPOINT,
@@ -387,7 +388,7 @@ describe("initTracing", () => {
     await handle.shutdown();
     await handle.shutdown();
     expect(receiver.requests).toHaveLength(1);
-    await expect(remote.refresh()).rejects.toMatchObject({ code: "CONFIG" });
+    await expect(remote.refresh()).rejects.toMatchObject({ code: "CANCELLED" });
   });
 
   it("remote sampler: an existing sampler is not closed; parentBased false; true uses the env sampling config", async () => {
@@ -448,7 +449,7 @@ describe("initTracing", () => {
     handle.tracer("t").startSpan("op").end();
     await client.close();
     expect(receiver.requests).toHaveLength(1);
-    expect(() => client.initTracing({ serviceName: "x" })).toThrow(ConfigError);
+    expect(() => client.initTracing({ serviceName: "x" })).toThrow(CancelledError);
   });
 
   it("client.initTracing: a remote sampler uses the client's sampling config", async () => {

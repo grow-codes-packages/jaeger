@@ -3,6 +3,7 @@ import { ROOT_CONTEXT, SpanKind } from "@opentelemetry/api";
 import { SamplingDecision } from "@opentelemetry/sdk-trace-base";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  CancelledError,
   ConfigError,
   JaegerClient,
   JaegerRemoteSampler,
@@ -298,7 +299,7 @@ describe("JaegerRemoteSampler", () => {
     });
     expect(other.samplingUrl).toContain("x=1");
     await client.close();
-    expect(() => client.remoteSampler({ serviceName: "late" })).toThrow(ConfigError);
-    await expect(s.refresh()).rejects.toMatchObject({ code: "CONFIG" });
+    expect(() => client.remoteSampler({ serviceName: "late" })).toThrow(CancelledError);
+    await expect(s.refresh()).rejects.toMatchObject({ code: "CANCELLED" });
   });
 });

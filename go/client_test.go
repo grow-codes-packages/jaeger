@@ -233,7 +233,7 @@ func TestClient(t *testing.T) {
 		if _, err := c.ServerVersion(t.Context()); !errors.Is(err, ErrUnsupported) {
 			t.Fatalf("metrics without target_info: %v", err)
 		}
-		ts404 := newTestServer(t, status(http.StatusNotFound))
+		ts404 := newTestServer(t, statusHandler(http.StatusNotFound))
 		if _, err := newTestClient(t, ts404.URL, nil).ServerVersion(t.Context()); !errors.Is(err, ErrUnsupported) {
 			t.Fatalf("root 404: %v", err)
 		}
@@ -243,7 +243,7 @@ func TestClient(t *testing.T) {
 		if info, err := newTestClient(t, noVersion.URL, nil).BuildInfo(t.Context()); err != nil || info != nil {
 			t.Fatalf("build info without version: %+v %v", info, err)
 		}
-		ts500 := newTestServer(t, status(http.StatusInternalServerError))
+		ts500 := newTestServer(t, statusHandler(http.StatusInternalServerError))
 		if _, err := newTestClient(t, ts500.URL, func(cfg *Config) { cfg.Retry = fastRetry(0) }).BuildInfo(t.Context()); !errors.Is(err, ErrUnavailable) {
 			t.Fatalf("build info 500: %v", err)
 		}

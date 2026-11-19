@@ -234,9 +234,12 @@ def test_init_tracing_grpc_round_trip(env: dict[str, str], query: sdk.JaegerQuer
     service = unique("grpc")
     handle = tracing_handle(env, service, protocol="grpc", compression="gzip")
     assert handle.endpoint == env["GROW_JAEGER_OTLP_GRPC_ENDPOINT"]
-    with handle.tracer("it").start_as_current_span("grpc-root") as root:
-        with handle.tracer("it").start_as_current_span("grpc-child"):
-            pass
+    tracer = handle.tracer("it")
+    with (
+        tracer.start_as_current_span("grpc-root") as root,
+        tracer.start_as_current_span("grpc-child"),
+    ):
+        pass
     handle.force_flush(10)
     handle.shutdown()
     trace = query.wait_for_trace(_tid(root), min_spans=2, **WAIT)

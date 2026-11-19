@@ -409,7 +409,7 @@ async fn remote_sampling() {
     let service = unique("sdk-rust-remote");
     let mut config = TracingConfig::new(service.clone()).with_set_global(false);
     config.batch.scheduled_delay = Duration::from_millis(100);
-    let h = sdk::init_tracing_with_sampler(config, ops.clone()).unwrap();
+    let h = sdk::init_tracing_with_remote_sampler(config, ops.clone()).unwrap();
     let t = h.tracer("t", None);
     assert!(!t.start("/health").span_context().is_sampled());
     // "sampled-op" uses the service rate 0.8: find a trace id the sampler keeps
