@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/grow-codes-packages/jaeger/compare/java-v0.1.1...java-v0.1.2) (2026-11-19)
+
+
+### Dependencies
+
+* **java:** Bump the java group across 2 directories with 14 updates ([#12](https://github.com/grow-codes-packages/jaeger/issues/12)) ([a0ef224](https://github.com/grow-codes-packages/jaeger/commit/a0ef224c5eac283281cfd1ad03d722029a139577))
+
 ## [0.1.1](https://github.com/grow-codes-packages/jaeger/compare/java-v0.1.0...java-v0.1.1) (2026-11-19)
 
 
