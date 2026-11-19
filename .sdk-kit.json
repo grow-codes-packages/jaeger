@@ -82,7 +82,7 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "bd3a192a5d2c99318f08123e0fa088290c9739dfa84225520753eafe8136206d",
+      "sha256": "c6f9dc3af80d9bc53a96e427697f7f4a51bd952ca6bec271271dcfb3924624cf",
       "generated": true
     },
     {
@@ -92,7 +92,7 @@
     },
     {
       "path": ".release-please-manifest.json",
-      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "sha256": "8bb8eecb8fb9f763e2a20886e5ed9cc77e6c8f2ead86f3ef0291e54d9ae75250",
       "generated": false
     },
     {
@@ -311,7 +311,7 @@
     },
     {
       "path": "docs/index.md",
-      "sha256": "efacb4a6eb380c39c5c7a3c11dca63c643c08f1f029d96fe4093f23c97a7d935",
+      "sha256": "4af2b9a0eb2047dfb0450cd1ea0bce3adc6ef7d04c94e96a383d6efcdf5a408e",
       "generated": false
     },
     {
@@ -676,7 +676,7 @@
     },
     {
       "path": "java/Makefile",
-      "sha256": "95ca56507e84673fae5d4e7b21787b18c14cad44918044b4fc2b43f3acdc58de",
+      "sha256": "ebfb97d3ff8ceeb68c7cb022025f8babb9283b668ec0eb5584939f015568db0b",
       "generated": false
     },
     {
@@ -1196,7 +1196,7 @@
     },
     {
       "path": "python/Makefile",
-      "sha256": "503f244e3e58421c6d101668602ed72fb48acb0f59651b2bc4f6c4e4bd9ade6c",
+      "sha256": "37226beab39d0e11f3b5232ef663ecac334614178242ceeddbb1f1042dff5098",
       "generated": false
     },
     {
@@ -1346,7 +1346,7 @@
     },
     {
       "path": "python/src/grow_jaeger/_version.py",
-      "sha256": "326553d84c140a43dd807c7e7ffd9a77a0b48f004b8de216cf29e7959ca2ed0e",
+      "sha256": "a77fa54f51fdf50ebdb72c3a3172a1bc4dbc18af2125c9b46a337b7947d33a8e",
       "generated": false
     },
     {
@@ -1801,7 +1801,7 @@
     },
     {
       "path": "typescript/Makefile",
-      "sha256": "601dcffa5a071d8e7fcdccfd152c6ef9a428d41667d6c034203d5b81bb2a7657",
+      "sha256": "8331a33867631e13531df501e1995a9296b8eb1fe1d62bcef15b4a8590fd5290",
       "generated": false
     },
     {
@@ -2131,12 +2131,12 @@
     },
     {
       "path": "typescript/tsup.config.ts",
-      "sha256": "9a086b7b970de220f1604f52c2ecd1b5a9ee66d053fff28a5b734d50f43dfd2a",
+      "sha256": "22da20e1e6d1362ee67803b6529c36b903587d5489d63d207207963653b6bdc0",
       "generated": false
     },
     {
       "path": "typescript/typedoc.json",
-      "sha256": "6f79ccbde7a78757c7843644e8a3afd11f7f82f56e5f03ab78502ec1b430cc7b",
+      "sha256": "8e6092976b5c1035159c78a5f0f599d892680cd76b187a3491beeb12fd6ca2a1",
       "generated": false
     },
     {
