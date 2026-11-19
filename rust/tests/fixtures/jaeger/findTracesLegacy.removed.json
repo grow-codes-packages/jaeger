@@ -1,0 +1,19 @@
+{
+  "fixture": "findTracesLegacy.removed",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/traces?service=sdk-wk-86837b62&limit=5",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-1abed58a64ec69d9809d2228f311187e-d99912aabfb438c3-01"
+    },
+    "body": "404 page not found\n"
+  }
+}

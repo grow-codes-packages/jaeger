@@ -1,6 +1,6 @@
 ---
 name: jaeger-sdk
-description: Add and use the Grow Codes SDK for Jaeger (`jaeger`) in TypeScript, Rust, Go, Python or Java projects. Use when code must talk to Jaeger - installing @grow-codes/jaeger, the grow-jaeger crate or PyPI package, the Go module github.com/grow-codes-packages/jaeger/go or Maven codes.grow.packages:jaeger, configuring it with GROW_JAEGER_* variables, handling JaegerError codes, testing with the bundled fakes, or running the Docker integration suite of this repository.
+description: Add and use the Grow Codes SDK for Jaeger (`jaeger`) in TypeScript, Rust, Go, Python or Java projects. Use when code must send traces to Jaeger (OpenTelemetry OTLP preset), read traces back through the Jaeger query API, use Jaeger remote sampling, or talk to Jaeger otherwise - installing @grow-codes/jaeger, the grow-jaeger crate or PyPI package, the Go module github.com/grow-codes-packages/jaeger/go or Maven codes.grow.packages:jaeger, configuring it with GROW_JAEGER_* variables, handling JaegerError codes, testing with the bundled fakes, or running the Docker integration suite of this repository.
 ---
 
 # Jaeger SDK (Grow Codes)
@@ -25,11 +25,18 @@ Check the latest version in the README badges before pinning one.
 Prefer environment configuration so no credential is written into code:
 
 ```sh
-export GROW_JAEGER_URL=https://jaeger.example.internal
-export GROW_JAEGER_TOKEN=...            # from your secret store, never committed
+export GROW_JAEGER_URL=http://jaeger:16686                 # query API (UI port)
+export GROW_JAEGER_OTLP_HTTP_ENDPOINT=http://jaeger:4318   # span export (or OTEL_EXPORTER_OTLP_ENDPOINT)
+export GROW_JAEGER_SERVICE_NAME=checkout                   # or OTEL_SERVICE_NAME
+export GROW_JAEGER_SAMPLING_URL=http://jaeger:5778/sampling  # only for remote sampling
+export GROW_JAEGER_TOKEN=...   # only behind an auth proxy; from your secret store, never committed
 ```
 
-Precedence: explicit config value > `GROW_JAEGER_*` > vendor variables (`OTEL_EXPORTER_OTLP_*`, `JAEGER_QUERY_URL`, `GROW_JAEGER_*`) > default.
+Precedence: explicit config value > `GROW_JAEGER_*` > vendor variables (`JAEGER_QUERY_URL`,
+`JAEGER_SAMPLING_ENDPOINT`) > default. The exporter reads explicit > `GROW_JAEGER_OTLP_*` >
+`OTEL_EXPORTER_OTLP_TRACES_*` > `OTEL_EXPORTER_OTLP_*` > default (`http/protobuf` to
+`http://127.0.0.1:4318/v1/traces`; `grpc` uses 4317). Optional: `GROW_JAEGER_HEALTH_URL`
+(healthcheckv2, 13133) and `GROW_JAEGER_METRICS_URL` (8888, version fallback).
 Other variables: `…_CONNECT_TIMEOUT`, `…_REQUEST_TIMEOUT`, `…_TOTAL_TIMEOUT` (`10s`, `1500`),
 `…_MAX_RETRIES`, `…_CA_CERT`, `…_CLIENT_CERT`, `…_CLIENT_KEY`, `…_PROXY`. Environment proxies
 (`HTTPS_PROXY`) are ignored unless `proxy` is set.
@@ -56,6 +63,31 @@ Call `initTracing({ serviceName })` once at startup, wrap work in `withSpan(name
 trace query client to read traces back (`getTrace`, `searchTraces`, `waitForTrace`).
 
 <!-- service:skill-usage — the service adds its own functions and examples here. -->
+
+### Jaeger specifics
+
+| Task | TypeScript | Rust | Go | Python | Java |
+| - | - | - | - | - | - |
+| Start tracing | `initTracing({ serviceName })` | `init_tracing(TracingConfig::new(name))?` | `jaeger.InitTracing(ctx, jaeger.TracingConfig{ServiceName: name})` | `init_tracing(service_name=name)` | `JaegerTracing.initTracing(TracingConfig.builder(name).build())` |
+| Sampling preset | `...SamplingPreset.production` | `SamplingPreset::PRODUCTION.apply(cfg)` | `jaeger.SamplingProduction.Apply(cfg)` | `**SAMPLING_PRODUCTION.as_kwargs()` | `SamplingPreset.production().applyTo(builder)` |
+| Read a trace | `client.query.getTrace(id)` | `client.query().get_trace(id).await?` | `client.Query().GetTrace(ctx, id)` | `client.query.get_trace(id)` | `client.query().getTrace(id)` |
+| Search | `client.query.findTraces({ service })` / `searchTraces` | `find_traces(&q)` / `search_traces` | `FindTraces` / `SearchTraces` | `find_traces(service=…)` / `search_traces` | `findTraces` / `searchTraces` |
+| Wait in a test | `client.query.waitForTrace(id, { timeoutMs })` | `wait_for_trace(id, opts)` | `WaitForTrace(ctx, id, opts)` | `wait_for_trace(id, timeout_s=…)` | `waitForTrace(id, opts)` |
+| Remote sampling | `initTracing({ serviceName, remoteSampler: true })` | `init_tracing_with_sampler(cfg, sampler)` | `jaeger.InitTracing(ctx, cfg, jaeger.WithSampler(s))` | `init_tracing(service_name=…, remote_sampler=True)` | `client.initTracing(cfg, Options.builder().remoteSampling(RemoteSampling.defaults()))` |
+
+Rules that save debugging time:
+
+- Call `forceFlush()` (or `shutdown()`) before reading a trace back; spans are batched.
+- Searches always send a time window (default: the last hour); widen `start`/`end` for older
+  traces. `searchTraces` returns summaries, `findTraces` full traces; no match is `[]`.
+- Span-kind filters are sent lower-case; `listOperations` returns names, `getOperations`
+  `{name, spanKind}`.
+- `OTEL_TRACES_SAMPLER=parentbased_jaeger_remote` turns on remote sampling without code changes
+  (URL from `OTEL_TRACES_SAMPLER_ARG=endpoint=…` or `GROW_JAEGER_SAMPLING_URL`).
+- Use unique service names in tests: the all-in-one reports itself as `jaeger`, and never export
+  all-zero trace ids (they break search in the memory store).
+- `serverVersion()` returns `2.23.0` (no `v`); `UNSUPPORTED` when the UI is disabled and no
+  `metricsUrl` is set.
 
 ## 4. Test code that uses the SDK
 

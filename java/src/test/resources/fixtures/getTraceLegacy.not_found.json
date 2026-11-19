@@ -1,0 +1,30 @@
+{
+  "fixture": "getTraceLegacy.not_found",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/traces/ffffffffffffffffffffffffffffffff",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-2ac1fdf27176c2758e5f985cf29338fe-d46a101fc182f9e3-01"
+    },
+    "body": {
+      "data": null,
+      "total": 0,
+      "limit": 0,
+      "offset": 0,
+      "errors": [
+        {
+          "code": 404,
+          "msg": "trace not found"
+        }
+      ]
+    }
+  }
+}

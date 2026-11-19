@@ -1,0 +1,30 @@
+{
+  "fixture": "getTraceLegacy.invalid_id",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/traces/zz",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-f858c9c1839148b3904a4d9752719e4c-d3363bdbbc83b9e1-01"
+    },
+    "body": {
+      "data": null,
+      "total": 0,
+      "limit": 0,
+      "offset": 0,
+      "errors": [
+        {
+          "code": 400,
+          "msg": "invalid length for TraceID"
+        }
+      ]
+    }
+  }
+}

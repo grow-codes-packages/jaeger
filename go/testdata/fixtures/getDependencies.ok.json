@@ -1,0 +1,36 @@
+{
+  "fixture": "getDependencies.ok",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/dependencies?endTs=1795034983494&lookback=3600000",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-80f75fda0da077596ccee0fbce3c44aa-287d291bd4b6513e-01"
+    },
+    "body": {
+      "data": [
+        {
+          "parent": "sdk-pb-86837b62",
+          "child": "sdk-pb-86837b62-wk",
+          "callCount": 1
+        },
+        {
+          "parent": "sdk-gw-86837b62",
+          "child": "sdk-wk-86837b62",
+          "callCount": 1
+        }
+      ],
+      "total": 0,
+      "limit": 0,
+      "offset": 0,
+      "errors": null
+    }
+  }
+}

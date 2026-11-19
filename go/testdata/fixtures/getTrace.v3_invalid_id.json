@@ -1,0 +1,24 @@
+{
+  "fixture": "getTrace.v3_invalid_id",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/traces/zz",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-7c003afca5890a8ec9ea593ca8017fd0-015afc67e1395269-01"
+    },
+    "body": {
+      "error": {
+        "httpCode": 400,
+        "message": "malformed parameter trace_id: invalid length for TraceID"
+      }
+    }
+  }
+}

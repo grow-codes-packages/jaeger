@@ -1,0 +1,53 @@
+{
+  "fixture": "capabilities.ok",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/capabilities",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-6f4b3884c99bb56b97ad80fac437de96-1aa3fb0fda174fc6-01"
+    },
+    "body": {
+      "search": {
+        "withoutServiceName": true,
+        "filter": {
+          "levels": [
+            "span",
+            "resource",
+            "scope",
+            "event",
+            "link"
+          ],
+          "operators": [
+            "and",
+            "or",
+            "not",
+            "eq",
+            "ne",
+            "gt",
+            "lt",
+            "gte",
+            "lte",
+            "regex",
+            "exists",
+            "in",
+            "not_in",
+            "some",
+            "phrase",
+            "fulltext"
+          ]
+        },
+        "paginated": true,
+        "spanSearch": true,
+        "spanSorting": true
+      }
+    }
+  }
+}

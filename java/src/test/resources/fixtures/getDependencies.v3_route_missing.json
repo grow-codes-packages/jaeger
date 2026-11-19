@@ -1,0 +1,19 @@
+{
+  "fixture": "getDependencies.v3_route_missing",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/dependencies",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-3a0385787e872855d369d6cb9d8fbf92-b66fd4a88310731d-01"
+    },
+    "body": "404 page not found\n"
+  }
+}

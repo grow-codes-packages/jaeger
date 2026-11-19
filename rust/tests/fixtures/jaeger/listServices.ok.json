@@ -1,0 +1,32 @@
+{
+  "fixture": "listServices.ok",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/services",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "traceresponse": "00-369cee2c651237fb7bf9d767269df551-5c72f5e1b76c4aab-01"
+    },
+    "body": {
+      "services": [
+        "sdk-grpc-86837b62",
+        "sdk-tgh-86837b62",
+        "sdk-gz-86837b62",
+        "sdk-gw-86837b62",
+        "sdk-many-86837b62",
+        "sdk-wk-86837b62",
+        "grow-bootstrap",
+        "sdk-pb-86837b62",
+        "sdk-pb-86837b62-wk",
+        "jaeger"
+      ]
+    }
+  }
+}

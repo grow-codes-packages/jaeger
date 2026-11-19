@@ -1,0 +1,24 @@
+{
+  "fixture": "getTrace.v3_bad_time",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:16686",
+    "path": "/api/v3/traces/31d0f4ed0c5cf87b3a63afbe7b0dc8d1?startTime=yesterday",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8",
+      "traceresponse": "00-609812bbc69f99d2207e0673ea4db26c-c480fd973ba47a1e-01"
+    },
+    "body": {
+      "error": {
+        "httpCode": 400,
+        "message": "malformed parameter startTime: parsing time \"yesterday\" as \"2006-01-02T15:04:05.999999999Z07:00\": cannot parse \"yesterday\" as \"2006\""
+      }
+    }
+  }
+}

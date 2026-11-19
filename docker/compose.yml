@@ -30,7 +30,7 @@ x-test: &test
   volumes:
     - bootstrap:/bootstrap:ro
   environment:
-    GROW_JAEGER_URL: ${GROW_JAEGER_URL:-http://service:16686}
+    GROW_JAEGER_URL: ${GROW_JAEGER_URL:-http://jaeger:16686}
     GROW_BOOTSTRAP_ENV: /bootstrap/env
     GROW_TEST_RUN_ID: ${GROW_TEST_RUN_ID:-local}
   init: true

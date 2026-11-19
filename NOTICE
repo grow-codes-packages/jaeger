@@ -59,3 +59,21 @@ copyright and licence.
 
   CODE_OF_CONDUCT.md is adapted from the Contributor Covenant, version 2.1,
   https://www.contributor-covenant.org, licensed under CC BY 4.0.
+
+  Test fixtures (typescript/test/fixtures, rust/tests/fixtures,
+  go/testdata/fixtures, python/tests/fixtures, java/src/test/resources/fixtures)
+  contain HTTP responses recorded from the Jaeger 2.23.0 server, including a
+  fragment of the Jaeger UI page (the JAEGER_VERSION build information).
+  Jaeger: Copyright The Jaeger Authors, https://github.com/jaegertracing/jaeger,
+  licensed under the Apache License, Version 2.0.
+
+  docker/config/jaeger-sampling.yaml and docker/config/strategies.seed.json
+  follow the configuration formats documented by the Jaeger project (Apache-2.0).
+
+  The remote sampling client implements the Jaeger sampling API (the
+  api_v2 sampling.proto JSON form: strategyType, probabilisticSampling,
+  rateLimitingSampling, operationSampling) and the query client reads the
+  Jaeger api_v3 JSON form and OTLP JSON (opentelemetry-proto, Copyright The
+  OpenTelemetry Authors, Apache-2.0). Field names are used for
+  interoperability; no code or .proto files from these projects are copied
+  into this repository.

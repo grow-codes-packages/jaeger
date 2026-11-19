@@ -1,0 +1,25 @@
+{
+  "fixture": "sampling.post",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "POST",
+    "host": "jaeger:5778",
+    "path": "/sampling?service=x",
+    "headers": {},
+    "body": {
+      "bytes": 0
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "strategyType": "PROBABILISTIC",
+      "probabilisticSampling": {
+        "samplingRate": 1
+      }
+    }
+  }
+}

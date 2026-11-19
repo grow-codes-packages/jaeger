@@ -20,8 +20,13 @@ Python and Java** — one API, five idiomatic packages, tested against a real Ja
 - **Typed client** with timeouts, retries with jitter, `Retry-After`, cancellation and one error
   model (`JaegerError` with canonical codes) in every language.
 - **Secrets stay secret**: credentials are redacted in `toString`, logs, hooks and error messages.
-- **Tracing**: OpenTelemetry setup in one call, span helpers, context propagation, framework
-  middleware and a trace query client.
+- **Tracing**: OpenTelemetry setup in one call with the Jaeger OTLP preset (HTTP/protobuf on
+  4318 or gRPC on 4317), sampling presets, span helpers, context propagation and framework
+  middleware.
+- **Query**: read traces back through Jaeger's v3 query API — `getTrace`, `findTraces`,
+  `searchTraces`, services, operations and dependencies, in one normalized trace model.
+- **Remote sampling**: an OpenTelemetry sampler driven by Jaeger's sampling endpoint (port 5778),
+  also enabled by `OTEL_TRACES_SAMPLER=jaeger_remote`.
 
 ## Contents
 
@@ -49,7 +54,7 @@ versions with the same API usually work; see [Compatibility](#compatibility) and
 | Language | Package | Install |
 | - | - | - |
 | TypeScript (Node.js ≥ 22.12) | `@grow-codes/jaeger` | `npm install @grow-codes/jaeger` |
-| Rust (MSRV 1.85) | `grow-jaeger` | `cargo add grow-jaeger` |
+| Rust (MSRV 1.88) | `grow-jaeger` | `cargo add grow-jaeger` |
 | Go (1.26+) | `github.com/grow-codes-packages/jaeger/go` | `go get github.com/grow-codes-packages/jaeger/go` |
 | Python (≥ 3.10) | `grow-jaeger` | `pip install grow-jaeger` |
 | Java (17+) | `codes.grow.packages:jaeger` | see below |
@@ -73,20 +78,29 @@ implementation("codes.grow.packages:jaeger:0.1.0")
 ## Quickstart
 
 Every package reads its configuration from the environment (`GROW_JAEGER_URL`,
-`GROW_JAEGER_TOKEN`, …, see [Configuration](#configuration)) or from an explicit config
-object. The examples check the service health and make one authenticated call.
+`GROW_JAEGER_OTLP_HTTP_ENDPOINT`, …, see [Configuration](#configuration)) or from an explicit
+config object. Each example starts tracing, sends one span, reads it back through the query API
+and checks the service health.
+
+```sh
+export GROW_JAEGER_URL=http://127.0.0.1:16686            # query API
+export GROW_JAEGER_OTLP_HTTP_ENDPOINT=http://127.0.0.1:4318
+```
 
 ### TypeScript
 
 ```ts
-import { JaegerClient } from "@grow-codes/jaeger";
+import { JaegerClient, currentTraceId, initTracing, withSpan } from "@grow-codes/jaeger";
 
+const tracing = initTracing({ serviceName: "checkout" });
 const client = JaegerClient.fromEnv();
 try {
-  const health = await client.health();
-  console.log(health.healthy, health.status);
-  console.log("latency ms:", await client.ping());
+  const traceId = await withSpan("place-order", async () => currentTraceId());
+  await tracing.forceFlush();
+  const trace = await client.query.waitForTrace(traceId!, { timeoutMs: 15_000 });
+  console.log(trace.spans.map((s) => s.name), (await client.health()).healthy);
 } finally {
+  await tracing.shutdown();
   await client.close();
 }
 ```
@@ -94,14 +108,22 @@ try {
 ### Rust
 
 ```rust
+use grow_jaeger::tracing::{TracingConfig, WaitForTraceOptions};
 use grow_jaeger::JaegerClient;
+use opentelemetry::trace::{Span as _, Tracer as _};
 
 #[tokio::main]
 async fn main() -> Result<(), grow_jaeger::Error> {
+    let tracing = grow_jaeger::init_tracing(TracingConfig::new("checkout"))?;
+    let mut span = tracing.tracer("checkout", None).start("place-order");
+    let trace_id = span.span_context().trace_id().to_string();
+    span.end();
+    tracing.force_flush(None).await?;
+
     let client = JaegerClient::from_env()?;
-    let health = client.health().await?;
-    println!("{} {}", health.healthy, health.status);
-    println!("latency: {:?}", client.ping().await?);
+    let trace = client.query().wait_for_trace(&trace_id, WaitForTraceOptions::default()).await?;
+    println!("{} spans, healthy: {}", trace.spans.len(), client.health().await?.healthy);
+    tracing.shutdown().await?;
     client.close().await;
     Ok(())
 }
@@ -122,29 +144,43 @@ import (
 
 func main() {
 	ctx := context.Background()
+	tracing, err := jaeger.InitTracing(ctx, jaeger.TracingConfig{ServiceName: "checkout"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tracing.Shutdown(ctx)
+	_, span := tracing.Tracer("checkout").Start(ctx, "place-order")
+	span.End()
+	_ = tracing.ForceFlush(ctx)
+
 	client, err := jaeger.NewClientFromEnv()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer client.Close()
-
-	health, err := client.Health(ctx)
+	tr, err := client.Query().WaitForTrace(ctx, span.SpanContext().TraceID().String(), jaeger.WaitForTraceOptions{})
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(health.Healthy, health.Status)
+	health, _ := client.Health(ctx)
+	fmt.Println(len(tr.Spans), "spans, healthy:", health.Healthy)
 }
 ```
 
 ### Python
 
 ```python
-from grow_jaeger import JaegerClient
+from grow_jaeger import JaegerClient, current_trace_id, init_tracing, with_span
+
+tracing = init_tracing(service_name="checkout")
+with with_span("place-order"):
+    trace_id = current_trace_id()
+tracing.force_flush()
 
 with JaegerClient.from_env() as client:
-    health = client.health()
-    print(health.healthy, health.status)
-    print("latency ms:", client.ping())
+    trace = client.query.wait_for_trace(trace_id, timeout_s=15)
+    print([s.name for s in trace.spans], client.health().healthy)
+tracing.shutdown()
 ```
 
 Async code uses `AsyncJaegerClient` with the same methods (`async with`, `await client.health()`).
@@ -153,12 +189,22 @@ Async code uses `AsyncJaegerClient` with the same methods (`async with`, `await 
 
 ```java
 import codes.grow.packages.jaeger.JaegerClient;
+import codes.grow.packages.jaeger.JaegerTracing;
+import codes.grow.packages.jaeger.JaegerTracingHandle;
+import codes.grow.packages.jaeger.tracing.Spans;
+import codes.grow.packages.jaeger.tracing.Traced;
+import codes.grow.packages.jaeger.tracing.TracingConfig;
+import codes.grow.packages.jaeger.tracing.query.Trace;
+import codes.grow.packages.jaeger.tracing.query.WaitForTraceOptions;
 
+JaegerTracingHandle tracing = JaegerTracing.initTracing(TracingConfig.builder("checkout").build());
+String traceId = Traced.run("place-order", () -> Spans.currentTraceId().orElseThrow());
+tracing.forceFlush();
 try (JaegerClient client = JaegerClient.fromEnv()) {
-    var health = client.health();
-    System.out.println(health.healthy() + " " + health.status());
-    System.out.println("latency ms: " + client.ping());
+    Trace trace = client.query().waitForTrace(traceId, WaitForTraceOptions.defaults());
+    System.out.println(trace.spans().size() + " spans, healthy: " + client.health().healthy());
 }
+tracing.shutdown();
 ```
 
 More complete programs live in [examples/](examples/) — one folder per language.
@@ -169,10 +215,15 @@ All settings can be passed in code or through environment variables. Precedence:
 `GROW_JAEGER_*` variable > vendor variable > default.** A present but invalid value raises a
 `ConfigError` that names the variable (never its value).
 
-| Setting | Environment variable | Default |
+**Client** (`JaegerConfig`, used by the client, the query client and remote samplers):
+
+| Setting | Environment variables (precedence order) | Default |
 | - | - | - |
-| `url` | `GROW_JAEGER_URL` | service default |
-| `token` | `GROW_JAEGER_TOKEN` | none |
+| `url` (query API, port 16686) | `GROW_JAEGER_URL`, `JAEGER_QUERY_URL` | `http://127.0.0.1:16686` |
+| `token` (bearer token for an auth proxy; never sent by `health()`) | `GROW_JAEGER_TOKEN` | none |
+| `samplingUrl` (remote sampling, port 5778) | `GROW_JAEGER_SAMPLING_URL`, `JAEGER_SAMPLING_ENDPOINT` | `http://127.0.0.1:5778/sampling` |
+| `healthUrl` (healthcheckv2 `/status`, port 13133) | `GROW_JAEGER_HEALTH_URL` | none |
+| `metricsUrl` (Prometheus `/metrics`, port 8888; version fallback) | `GROW_JAEGER_METRICS_URL` | none |
 | `connectTimeout` | `GROW_JAEGER_CONNECT_TIMEOUT` | 10 s |
 | `requestTimeout` (per attempt) | `GROW_JAEGER_REQUEST_TIMEOUT` | 30 s |
 | `totalTimeout` (including retries) | `GROW_JAEGER_TOTAL_TIMEOUT` | 120 s |
@@ -183,7 +234,23 @@ All settings can be passed in code or through environment variables. Precedence:
 | `proxy` | `GROW_JAEGER_PROXY` | none (environment proxies are ignored) |
 | `headers`, `userAgentSuffix`, `hooks`, `logger` | — | none |
 
-Vendor variables that are also read: `OTEL_EXPORTER_OTLP_*`, `JAEGER_QUERY_URL`, `GROW_JAEGER_*`.
+**Tracing** (`initTracing`; per field: explicit > `GROW_JAEGER_OTLP_*` >
+`OTEL_EXPORTER_OTLP_TRACES_*` > `OTEL_EXPORTER_OTLP_*` > default):
+
+| Setting | Environment variables (precedence order) | Default |
+| - | - | - |
+| `protocol` | `GROW_JAEGER_OTLP_PROTOCOL`, `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL`, `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
+| `endpoint` | `GROW_JAEGER_OTLP_GRPC_ENDPOINT` / `GROW_JAEGER_OTLP_HTTP_ENDPOINT` (by protocol), `GROW_JAEGER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT` (HTTP appends `/v1/traces`) | `http://127.0.0.1:4318/v1/traces` (gRPC `http://127.0.0.1:4317`) |
+| `headers` | `GROW_JAEGER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_TRACES_HEADERS`, `OTEL_EXPORTER_OTLP_HEADERS` | none |
+| `compression` | `GROW_JAEGER_OTLP_COMPRESSION`, `OTEL_EXPORTER_OTLP_TRACES_COMPRESSION`, `OTEL_EXPORTER_OTLP_COMPRESSION` | `gzip` |
+| `batch.exportTimeout` | `GROW_JAEGER_OTLP_TIMEOUT`, `OTEL_EXPORTER_OTLP_TRACES_TIMEOUT`, `OTEL_EXPORTER_OTLP_TIMEOUT` | 30 s |
+| `tls.caCertPath` | `GROW_JAEGER_OTLP_CERTIFICATE`, `GROW_JAEGER_OTLP_CA_CERT`, `OTEL_EXPORTER_OTLP_TRACES_CERTIFICATE`, `OTEL_EXPORTER_OTLP_CERTIFICATE` | system roots |
+| `tls.clientCertPath` | `GROW_JAEGER_OTLP_CLIENT_CERTIFICATE`, `OTEL_EXPORTER_OTLP_TRACES_CLIENT_CERTIFICATE`, `OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE` | none |
+| `tls.clientKeyPath` | `GROW_JAEGER_OTLP_CLIENT_KEY`, `OTEL_EXPORTER_OTLP_TRACES_CLIENT_KEY`, `OTEL_EXPORTER_OTLP_CLIENT_KEY` | none |
+| `serviceName` | `GROW_JAEGER_SERVICE_NAME`, `OTEL_SERVICE_NAME`, `service.name` in `OTEL_RESOURCE_ATTRIBUTES` | required |
+| `resourceAttributes` | `OTEL_RESOURCE_ATTRIBUTES` (merged; explicit keys win) | none |
+| `sampler`, `samplerRatio` | `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` (`jaeger_remote`, `parentbased_jaeger_remote` start the remote sampler) | `parentbased_always_on`, 1.0 |
+| `propagators` | `OTEL_PROPAGATORS` | `tracecontext,baggage` |
 
 Durations accept milliseconds (`1500`) or units (`500ms`, `10s`, `1m30s`); booleans accept
 `true/false/1/0/yes/no/on/off`. Field names follow each language's convention
@@ -194,13 +261,65 @@ Durations accept milliseconds (`1500`) or units (`500ms`, `10s`, `1m30s`); boole
 
 <!-- service:function-overview — the service fills this section; keep the heading. -->
 
-The same functions exist in every language, named per language convention (`getString` in
-TypeScript and Java, `get_string` in Python and Rust, `GetString` in Go).
+The same functions exist in every language, named per language convention (`getTrace` in
+TypeScript and Java, `get_trace` in Python and Rust, `GetTrace` in Go). Every function has an
+example in all five languages in the [documentation](https://grow-codes-packages.github.io/jaeger/functions/).
 
-| Area | Functions | Description |
-| - | - | - |
-| Client | `health`, `ping`, `serverVersion`, `close` | liveness, authenticated round trip, server version, shutdown |
-| Tracing | `initTracing`, `withSpan`, `traced`, `inject`, `extract`, `getTrace`, `searchTraces`, `listServices`, `listOperations`, `getDependencies`, `waitForTrace` | OpenTelemetry setup and trace queries |
+### Client — `JaegerClient`
+
+| Function | Description |
+| - | - |
+| `health()` | liveness of the query service (`GET /`, no token); healthcheckv2 detail with `healthUrl` |
+| `ping()` | authenticated round trip (`GET /api/v3/services`), returns the latency |
+| `serverVersion()` / `buildInfo()` | `2.23.0` from the UI page, else `target_info` at `metricsUrl`; `UNSUPPORTED` when neither has one |
+| `samplingStrategy(service)` | the remote sampling strategy of a service, fetched once |
+| `initTracing(config)` / `remoteSampler(service, interval)` | tracing and samplers that use the client's settings; shut down by `close()` |
+| `query` | the `JaegerQueryClient` (shares the client's connections) |
+| `close()` | idempotent; flushes and stops everything created through the client |
+
+| TypeScript | Rust | Go | Python | Java |
+| - | - | - | - | - |
+| `await client.serverVersion()` | `client.server_version().await?` | `client.ServerVersion(ctx)` | `client.server_version()` | `client.serverVersion()` |
+
+### Query — `JaegerQueryClient` (`TraceQueryClient`)
+
+| Function | Description |
+| - | - |
+| `getTrace(traceId)` / `requireTrace(traceId)` | one trace (`/api/v3/traces/{id}`, legacy fallback); `null` / `NOT_FOUND` when missing |
+| `findTraces(query)` | full traces by service, operation, tags, duration, time window, limit |
+| `searchTraces(query)` | trace summaries (`/api/v3/trace-summaries`) |
+| `listServices()` | services with stored spans |
+| `listOperations(service, {spanKind})` / `getOperations(…)` | operation names / names with span kind |
+| `getDependencies(range)` | service dependency edges |
+| `waitForTrace(traceId, opts)` | poll until a trace is queryable (tests) |
+
+| TypeScript | Rust | Go | Python | Java |
+| - | - | - | - | - |
+| `await client.query.findTraces({ service: "checkout" })` | `client.query().find_traces(&TraceSearchQuery::service("checkout")).await?` | `client.Query().FindTraces(ctx, jaeger.TraceSearchQuery{Service: "checkout"})` | `client.query.find_traces(service="checkout")` | `client.query().findTraces(TraceSearchQuery.forService("checkout"))` |
+
+### Tracing setup
+
+| Function | Description |
+| - | - |
+| `initTracing(config)` | OpenTelemetry setup with the Jaeger OTLP preset; returns a handle with `tracer`, `forceFlush`, `shutdown` |
+| `tracingConfigFromEnv(config)` / `resolveEndpoint(protocol, endpoint)` | the effective config / exporter URL |
+| `SamplingPreset` | `development`, `production`, `followParent`, `off`, `ratio(r)` |
+| `withSpan`, `traced`, `currentSpan`, `currentTraceId`, `addEvent`, `recordException`, `setError`, `inject`, `extract`, `traceFields` | shared span helpers and propagation |
+
+| TypeScript | Rust | Go | Python | Java |
+| - | - | - | - | - |
+| `initTracing({ serviceName: "checkout", ...SamplingPreset.production })` | `init_tracing(SamplingPreset::PRODUCTION.apply(TracingConfig::new("checkout")))?` | `jaeger.InitTracing(ctx, jaeger.SamplingProduction.Apply(jaeger.TracingConfig{ServiceName: "checkout"}))` | `init_tracing(service_name="checkout", **SAMPLING_PRODUCTION.as_kwargs())` | `JaegerTracing.initTracing(SamplingPreset.production().applyTo(TracingConfig.builder("checkout")).build())` |
+
+### Remote sampling
+
+| Function | Description |
+| - | - |
+| `JaegerRemoteSampler(samplingUrl, service, pollInterval)` | OpenTelemetry sampler: per-operation strategies win, else the rate limiter, else the probability; keeps the last good strategy |
+| `parseSamplingStrategy(body)` | parse a `/sampling` response |
+
+| TypeScript | Rust | Go | Python | Java |
+| - | - | - | - | - |
+| `new JaegerRemoteSampler({ serviceName: "checkout", samplingUrl })` | `JaegerRemoteSampler::new(url, "checkout", Duration::from_secs(60))?` | `jaeger.NewRemoteSampler(url, "checkout", time.Minute)` | `JaegerRemoteSampler(url, "checkout", 60)` | `JaegerRemoteSampler.create(url, "checkout", Duration.ofMinutes(1))` |
 
 <!-- /service:function-overview -->
 
@@ -223,7 +342,7 @@ stack is always removed afterwards (`docker compose down -v`). Unit tests need n
 
 | | TypeScript | Rust | Go | Python | Java |
 | - | - | - | - | - | - |
-| Runtime | Node.js ≥ 22.12, ESM + CJS | stable, MSRV 1.85 | 1.26, 1.27 | 3.10 – 3.14 | 17, 21, 25 |
+| Runtime | Node.js ≥ 22.12, ESM + CJS | stable, MSRV 1.88 | 1.26, 1.27 | 3.10 – 3.14 | 17, 21, 25 |
 | Async | `Promise` + `AbortSignal` | `async` (tokio), `blocking` feature | `context.Context` | sync + `asyncio` | sync + `CompletableFuture` |
 | Jaeger | `jaegertracing/jaeger:2.23.0` | `jaegertracing/jaeger:2.23.0` | `jaegertracing/jaeger:2.23.0` | `jaegertracing/jaeger:2.23.0` | `jaegertracing/jaeger:2.23.0` |
 

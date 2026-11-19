@@ -1,0 +1,18 @@
+{
+  "fixture": "sampling.missing_service",
+  "server": "jaeger v2.23.0",
+  "request": {
+    "method": "GET",
+    "host": "jaeger:5778",
+    "path": "/sampling",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "text/plain; charset=utf-8"
+    },
+    "body": "'service' parameter must be provided once\n"
+  }
+}
