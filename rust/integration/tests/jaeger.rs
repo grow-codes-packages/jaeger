@@ -412,9 +412,19 @@ async fn remote_sampling() {
     let h = sdk::init_tracing_with_sampler(config, ops.clone()).unwrap();
     let t = h.tracer("t", None);
     assert!(!t.start("/health").span_context().is_sampled());
-    let mut kept = t.start_with_context("sampled-op", &Context::new());
-    let trace_id = kept.span_context().trace_id().to_string();
-    kept.end();
+    // "sampled-op" uses the service rate 0.8: find a trace id the sampler keeps
+    let mut trace_id = None;
+    for _ in 0..50 {
+        let mut span = t.start_with_context("sampled-op", &Context::new());
+        let sampled = span.span_context().is_sampled();
+        let id = span.span_context().trace_id().to_string();
+        span.end();
+        if sampled {
+            trace_id = Some(id);
+            break;
+        }
+    }
+    let trace_id = trace_id.expect("no span was sampled at rate 0.8");
     h.force_flush(None).await.unwrap();
     let trace = c.query().wait_for_trace(&trace_id, wait()).await.unwrap();
     assert_eq!(trace.spans[0].service_name, service);
