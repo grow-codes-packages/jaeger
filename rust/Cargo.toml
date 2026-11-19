@@ -22,10 +22,15 @@ name = "grow_jaeger"
 path = "src/lib.rs"
 
 [features]
-# Blocking wrapper (`blocking::JaegerClient`) that owns a current-thread tokio runtime.
+default = ["otlp-tls"]
+# Blocking wrapper (`blocking::JaegerClient`) that owns a one-worker multi-thread tokio
+# runtime (background batching and exports keep running between blocking calls).
 blocking = []
 # In-memory fakes and the conformance runner (`testing` module).
 testing = []
+# OTLP/gRPC over TLS: `https` endpoints and `TracingConfig.tls` for `grpc` (opentelemetry-otlp
+# `tls-roots`, native root certificates).
+otlp-tls = ["opentelemetry-otlp/tls-roots"]
 # tower `TraceLayer` (works for axum and other tower/hyper servers).
 tower = ["dep:tower", "dep:pin-project-lite"]
 # `reqwest-middleware` middleware that creates client spans and injects trace context.
@@ -41,7 +46,7 @@ reqwest = { version = "0.12.9", default-features = false, features = ["rustls-tl
 serde = { version = "1.0.200", features = ["derive"] }
 serde_json = "1.0.120"
 sha2 = "0.10.8"
-tokio = { version = "1.43", features = ["rt", "time", "sync", "macros"] }
+tokio = { version = "1.43", features = ["rt", "rt-multi-thread", "time", "sync", "macros"] }
 tokio-util = { version = "0.7.11", default-features = false }
 tracing = { version = "0.1.40", default-features = false, features = ["std", "attributes"] }
 url = "2.5"
@@ -49,7 +54,7 @@ zeroize = { version = "1.8", features = ["zeroize_derive"] }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["std", "registry", "fmt"] }
 opentelemetry = { version = "0.31", default-features = false, features = ["trace"] }
 opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace", "rt-tokio", "experimental_trace_batch_span_processor_with_async_runtime"] }
-opentelemetry-otlp = { version = "0.31", default-features = false, features = ["trace", "http-proto", "grpc-tonic", "reqwest-client", "gzip-tonic", "gzip-http", "tls-roots"] }
+opentelemetry-otlp = { version = "0.31", default-features = false, features = ["trace", "http-proto", "grpc-tonic", "reqwest-client", "gzip-tonic", "gzip-http"] }
 tracing-opentelemetry = { version = "0.32", default-features = false }
 tower = { version = "0.5", optional = true, default-features = false }
 http = "1.1"

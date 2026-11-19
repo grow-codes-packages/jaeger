@@ -378,12 +378,12 @@ describe("waitForTrace, construction, close", () => {
     await client.query.close(); // no-op for the shared transport
     expect(await client.query.listServices()).toContain("jaeger");
     await client.close();
-    await expect(client.query.listServices()).rejects.toMatchObject({ code: "CONFIG" });
+    await expect(client.query.listServices()).rejects.toMatchObject({ code: "CANCELLED" });
 
     const standalone = new JaegerQueryClient(client.config);
     await standalone.close();
     await standalone.close();
-    await expect(standalone.listServices()).rejects.toMatchObject({ code: "CONFIG" });
+    await expect(standalone.listServices()).rejects.toMatchObject({ code: "CANCELLED" });
   });
 
   it("fromEnv reads GROW_JAEGER_URL, then JAEGER_QUERY_URL", async () => {

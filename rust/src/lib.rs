@@ -68,7 +68,7 @@ pub use crate::sampler::{
 };
 
 pub use crate::setup::{
-    init_tracing, init_tracing_with_options, init_tracing_with_sampler, jaeger_exporter,
+    init_tracing, init_tracing_with_options, init_tracing_with_remote_sampler, jaeger_exporter,
     resolve_endpoint, tracing_config_from_env, JaegerTracingHandle, JaegerTracingOptions,
     RemoteSampling, SamplingPreset, DEFAULT_OTLP_GRPC_ENDPOINT, DEFAULT_OTLP_HTTP_ENDPOINT,
     DEFAULT_TRACING_PROTOCOL,

@@ -253,7 +253,7 @@ async fn exporter_variants() {
         .with_header("X-Team", "core");
     jaeger_exporter(&grpc).unwrap();
     jaeger_exporter(&grpc.clone().with_compression(Compression::None)).unwrap();
-    jaeger_exporter(
+    let grpc_tls = jaeger_exporter(
         &grpc
             .clone()
             .with_endpoint("https://127.0.0.1:4317")
@@ -261,8 +261,15 @@ async fn exporter_variants() {
                 insecure_skip_verify: false,
                 ..tls.clone()
             }),
-    )
-    .unwrap();
+    );
+    if cfg!(feature = "otlp-tls") {
+        grpc_tls.unwrap();
+    } else {
+        // Without the crate feature `otlp-tls` the gRPC exporter cannot use TLS.
+        let err = grpc_tls.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Config);
+        assert!(err.message().contains("otlp-tls"), "{err}");
+    }
     for bad in [
         grpc.clone().with_tls(tls),
         grpc.clone().with_header("bad header", "x"),
@@ -343,7 +350,7 @@ async fn init_tracing_with_remote_sampler() {
     let config = TracingConfig::new("sdk-remote")
         .with_endpoint(server.uri())
         .with_set_global(true);
-    let h = sdk::init_tracing_with_sampler(config, sampler.clone()).unwrap();
+    let h = sdk::init_tracing_with_remote_sampler(config, sampler.clone()).unwrap();
     assert!(h.tracing_handle().is_none());
     assert_eq!(h.remote_sampler().unwrap().service(), "sdk-sampling-ops");
     let tracer = h.tracer("t", None);

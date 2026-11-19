@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -478,40 +477,13 @@ func isParentBased(s Sampler) bool {
 }
 
 // initTracingWithSampler is InitTracingWith with a caller-supplied head sampler
-// (wrapped in ParentBased when parentBased is true).
+// (wrapped in ParentBased when parentBased is true) as cfg.CustomSampler.
 func initTracingWithSampler(ctx context.Context, cfg TracingConfig, factory ExporterFactory, sampler sdktrace.Sampler, parentBased bool) (*TracingHandle, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
-	cfg = cfg.WithDefaults()
-	exporter, err := factory(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	res, err := buildResource(ctx, cfg)
-	if err != nil {
-		_ = exporter.Shutdown(ctx)
-		return nil, err
-	}
 	if parentBased {
 		sampler = sdktrace.ParentBased(sampler)
 	}
-	provider := sdktrace.NewTracerProvider(
-		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sampler),
-		sdktrace.WithBatcher(exporter,
-			sdktrace.WithMaxQueueSize(cfg.Batch.MaxQueueSize),
-			sdktrace.WithMaxExportBatchSize(cfg.Batch.MaxExportBatchSize),
-			sdktrace.WithBatchTimeout(cfg.Batch.ScheduledDelay),
-			sdktrace.WithExportTimeout(cfg.Batch.ExportTimeout),
-		),
-	)
-	h := &TracingHandle{provider: provider, propagator: buildPropagator(cfg.Propagators), config: cfg}
-	if !cfg.DisableSetGlobal {
-		otel.SetTracerProvider(provider)
-		otel.SetTextMapPropagator(h.propagator)
-	}
-	return h, nil
+	cfg.CustomSampler = sampler
+	return InitTracingWith(ctx, cfg, factory)
 }
 
 // SamplingPreset is a named head-sampling choice for TracingConfig.

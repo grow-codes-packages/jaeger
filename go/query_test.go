@@ -231,7 +231,7 @@ func TestQueryGetTrace(t *testing.T) {
 			t.Fatalf("retry: %+v %v calls=%d", tr, err, ts.calls.Load())
 		}
 
-		down := newTestServer(t, status(http.StatusBadGateway))
+		down := newTestServer(t, statusHandler(http.StatusBadGateway))
 		if _, err := newQueryClient(t, down.URL, func(cfg *Config) { cfg.Retry = fastRetry(1) }).GetTrace(t.Context(), fixtureTraceID); !errors.Is(err, ErrUnavailable) || down.calls.Load() != 3 {
 			t.Fatalf("exhausted: %v calls=%d", err, down.calls.Load())
 		}
@@ -353,7 +353,7 @@ func TestQueryFindAndSearch(t *testing.T) {
 		if _, err := q.FindTraces(t.Context(), TraceSearchQuery{Service: "bad"}); !errors.Is(err, ErrValidation) || !strings.Contains(err.Error(), "malformed parameter") {
 			t.Fatalf("400: %v", err)
 		}
-		missing := newTestServer(t, status(http.StatusNotFound))
+		missing := newTestServer(t, statusHandler(http.StatusNotFound))
 		if _, err := newQueryClient(t, missing.URL, nil).FindTraces(t.Context(), TraceSearchQuery{}); !errors.Is(err, ErrUnsupported) {
 			t.Fatalf("route missing: %v", err)
 		}
@@ -414,11 +414,11 @@ func TestQueryFindAndSearch(t *testing.T) {
 		if _, err := q.SearchTraces(t.Context(), TraceSearchQuery{Service: "garbage"}); !errors.Is(err, ErrUnavailable) {
 			t.Fatalf("bad JSON: %v", err)
 		}
-		missing := newTestServer(t, status(http.StatusNotFound))
+		missing := newTestServer(t, statusHandler(http.StatusNotFound))
 		if _, err := newQueryClient(t, missing.URL, nil).SearchTraces(t.Context(), TraceSearchQuery{}); !errors.Is(err, ErrUnsupported) {
 			t.Fatalf("route missing: %v", err)
 		}
-		down := newTestServer(t, status(http.StatusBadRequest))
+		down := newTestServer(t, statusHandler(http.StatusBadRequest))
 		if _, err := newQueryClient(t, down.URL, nil).SearchTraces(t.Context(), TraceSearchQuery{}); !errors.Is(err, ErrValidation) {
 			t.Fatalf("400: %v", err)
 		}
@@ -494,7 +494,7 @@ func TestQueryServicesAndOperations(t *testing.T) {
 		t.Fatalf("bad JSON: %v", err)
 	}
 
-	missing := newQueryClient(t, newTestServer(t, status(http.StatusNotFound)).URL, nil)
+	missing := newQueryClient(t, newTestServer(t, statusHandler(http.StatusNotFound)).URL, nil)
 	if _, err := missing.ListServices(t.Context()); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("services route missing: %v", err)
 	}
@@ -505,7 +505,7 @@ func TestQueryServicesAndOperations(t *testing.T) {
 	if _, err := garbage.ListServices(t.Context()); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("bad JSON: %v", err)
 	}
-	failing := newQueryClient(t, newTestServer(t, status(http.StatusInternalServerError)).URL, func(cfg *Config) { cfg.Retry = fastRetry(0) })
+	failing := newQueryClient(t, newTestServer(t, statusHandler(http.StatusInternalServerError)).URL, func(cfg *Config) { cfg.Retry = fastRetry(0) })
 	if _, err := failing.ListServices(t.Context()); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("500: %v", err)
 	}
@@ -577,11 +577,11 @@ func TestQueryDependencies(t *testing.T) {
 	if ts.calls.Load() != calls {
 		t.Fatal("invalid input must be rejected locally")
 	}
-	missing := newQueryClient(t, newTestServer(t, status(http.StatusNotFound)).URL, nil)
+	missing := newQueryClient(t, newTestServer(t, statusHandler(http.StatusNotFound)).URL, nil)
 	if _, err := missing.GetDependencies(t.Context(), DependencyOptions{}); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("route missing: %v", err)
 	}
-	failing := newQueryClient(t, newTestServer(t, status(http.StatusInternalServerError)).URL, func(cfg *Config) { cfg.Retry = fastRetry(0) })
+	failing := newQueryClient(t, newTestServer(t, statusHandler(http.StatusInternalServerError)).URL, func(cfg *Config) { cfg.Retry = fastRetry(0) })
 	if _, err := failing.GetDependencies(t.Context(), DependencyOptions{}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("500: %v", err)
 	}

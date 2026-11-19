@@ -73,7 +73,7 @@ trace query client to read traces back (`getTrace`, `searchTraces`, `waitForTrac
 | Read a trace | `client.query.getTrace(id)` | `client.query().get_trace(id).await?` | `client.Query().GetTrace(ctx, id)` | `client.query.get_trace(id)` | `client.query().getTrace(id)` |
 | Search | `client.query.findTraces({ service })` / `searchTraces` | `find_traces(&q)` / `search_traces` | `FindTraces` / `SearchTraces` | `find_traces(service=…)` / `search_traces` | `findTraces` / `searchTraces` |
 | Wait in a test | `client.query.waitForTrace(id, { timeoutMs })` | `wait_for_trace(id, opts)` | `WaitForTrace(ctx, id, opts)` | `wait_for_trace(id, timeout_s=…)` | `waitForTrace(id, opts)` |
-| Remote sampling | `initTracing({ serviceName, remoteSampler: true })` | `init_tracing_with_sampler(cfg, sampler)` | `jaeger.InitTracing(ctx, cfg, jaeger.WithSampler(s))` | `init_tracing(service_name=…, remote_sampler=True)` | `client.initTracing(cfg, Options.builder().remoteSampling(RemoteSampling.defaults()))` |
+| Remote sampling | `initTracing({ serviceName, remoteSampler: true })` | `init_tracing_with_remote_sampler(cfg, sampler)` | `jaeger.InitTracing(ctx, cfg, jaeger.WithSampler(s))` | `init_tracing(service_name=…, remote_sampler=True)` | `client.initTracing(cfg, Options.builder().remoteSampling(RemoteSampling.defaults()))` |
 
 Rules that save debugging time:
 
