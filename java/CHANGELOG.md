@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/grow-codes-packages/jaeger/compare/java-v0.1.2...java-v0.2.0) (2026-11-20)
+
+
+### Features
+
+* sync jaeger to sdk-kit 0.4.0 (foundation API) ([#14](https://github.com/grow-codes-packages/jaeger/issues/14)) ([b87d2f8](https://github.com/grow-codes-packages/jaeger/commit/b87d2f8e0fe7e8aa40fca02ca193125cc01ab081))
+
 ## [0.1.2](https://github.com/grow-codes-packages/jaeger/compare/java-v0.1.1...java-v0.1.2) (2026-11-19)
 
 
