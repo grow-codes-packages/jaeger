@@ -445,6 +445,11 @@
       "generated": false
     },
     {
+      "path": "go/AGENTS.md",
+      "sha256": "52aac92ff68138c6cd35c4f4ec6f790181aa19a59a3e69dbc9b9c755dbdc9877",
+      "generated": true
+    },
+    {
       "path": "go/Makefile",
       "sha256": "494e2f929ba48e9d0628c6d9b17d94a677ee3d6bbef073d9ac66545f2a7af9e1",
       "generated": true
@@ -507,6 +512,11 @@
     {
       "path": "go/core_hooks.go",
       "sha256": "10209adb44b8bca53b1e65917f2d8ba814c9398eea42ea17dac2beccb5106626",
+      "generated": true
+    },
+    {
+      "path": "go/core_key.go",
+      "sha256": "3c85b86567cda37a62a7b6912482a055d38f4d4b71352ead979c82e9cb39a191",
       "generated": true
     },
     {
@@ -681,7 +691,7 @@
     },
     {
       "path": "go/version.go",
-      "sha256": "1c837f7ac9b47bbd027b2299620e259290d171b7eebd9e9924d575465d95de00",
+      "sha256": "0b1876ca473606162281492c9009d1cc31bba761e8b5417da12121c6f6995850",
       "generated": false
     },
     {
@@ -1120,6 +1130,11 @@
       "generated": true
     },
     {
+      "path": "java/src/main/resources/META-INF/grow/jaeger/AGENTS.md",
+      "sha256": "ca7f1c7359f6ca839ef010beb3158204536f0d0e5e53446283e885058fef6378",
+      "generated": true
+    },
+    {
       "path": "java/src/main/resources/codes/grow/packages/jaeger/core/sdk.properties",
       "sha256": "500febbe628b577d1eafd5f52a331b2d0628dc67a6932879252dc633260abe5e",
       "generated": true
@@ -1270,13 +1285,18 @@
       "generated": false
     },
     {
+      "path": "python/src/grow_jaeger/AGENTS.md",
+      "sha256": "1fb3924e3b6d5c70e7a8426b0c68b65823776ce4ded251bc11f5108bd1642376",
+      "generated": true
+    },
+    {
       "path": "python/src/grow_jaeger/__init__.py",
       "sha256": "c44f1add4e7124843a5e5fbb0a08f4e507ab9ab664f5cfc8a60cf06990f78c94",
       "generated": false
     },
     {
       "path": "python/src/grow_jaeger/_core/__init__.py",
-      "sha256": "6ed8789924d515e85ffb5b19d71cb04021d7074f155d3a2d5398d8c45c09912b",
+      "sha256": "637d384736e4b5683bc72c14bf1a70548ddd1d2104483a736b2029f674b37d01",
       "generated": true
     },
     {
@@ -1331,7 +1351,7 @@
     },
     {
       "path": "python/src/grow_jaeger/_core/useragent.py",
-      "sha256": "e119bdd0c699ba66aab50ce0846a60291985bdaa9ea07f1cd81c4f668d354955",
+      "sha256": "c05f92424fa41da2a99b2f19ee9cb9507912e0bb37b1fa323bfa4ace2699b29d",
       "generated": true
     },
     {
@@ -1371,7 +1391,7 @@
     },
     {
       "path": "python/src/grow_jaeger/_version.py",
-      "sha256": "a77fa54f51fdf50ebdb72c3a3172a1bc4dbc18af2125c9b46a337b7947d33a8e",
+      "sha256": "7d1c20542e22e5d3055dc6738c8960fc7438ab08ab86dcca8738bc380e42f206",
       "generated": false
     },
     {
@@ -1503,6 +1523,11 @@
       "path": "rust/.gitignore",
       "sha256": "44e19e795df0e74663b0affde31f9aec4e08ec88787e680b404381b33134987a",
       "generated": false
+    },
+    {
+      "path": "rust/AGENTS.md",
+      "sha256": "74cf3bf4dab5523381e4961754fca35513ed6f8723ad1ab191fd7ad12319ebb3",
+      "generated": true
     },
     {
       "path": "rust/Cargo.toml",
@@ -1825,6 +1850,11 @@
       "generated": false
     },
     {
+      "path": "typescript/AGENTS.md",
+      "sha256": "e70196544ef1dc3b1ddc624fe1779b7b04a574bbf151f1b3a9894f98a60a40c8",
+      "generated": true
+    },
+    {
       "path": "typescript/Makefile",
       "sha256": "46e70ea3fcffb9c054d50642ee183ca5abbfa20ab413b9c22a58f10d2ffecfa9",
       "generated": false
@@ -1946,7 +1976,7 @@
     },
     {
       "path": "typescript/src/core/version.ts",
-      "sha256": "f221697383bc3d3948b724af4c23fb2314a09a5aa1527ba4141049ca589c3e39",
+      "sha256": "e7f777eeeb8c58e7f911d2eefeac26777f4c176fc99ef96be2e31adf6d857d73",
       "generated": true
     },
     {
